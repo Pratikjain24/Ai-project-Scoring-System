@@ -28,7 +28,20 @@ dist-ssr
 .env.*
 !.env.example
 
-# Database files
+# Database & SQLite files (never check in binaries)
 *.db
 *.db-shm
 *.db-wal
+*.db-journal
+*.sqlite
+*.sqlite3
+backend/*.db
+backend/*.db-shm
+projectxray.db
+*.jwt_keys.json
+.jwt_keys.json
+backend/.jwt_keys.json
+
+# Local uploads and test artifacts
+uploads/
+
