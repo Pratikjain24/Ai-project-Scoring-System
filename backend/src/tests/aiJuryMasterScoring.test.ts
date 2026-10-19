@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { app } from '../server';
 import { MasterScoringEngine } from '../scoring/masterScoringEngine';
 import { JuryRepository } from '../repositories/juryRepository';
+import { signToken } from '../services/tokenService';
 import {
   DEFAULT_WEIGHTS,
   DEFAULT_VERDICT_THRESHOLDS,
@@ -217,9 +218,12 @@ describe('Phase 9: AI Jury + Master Scoring Engine Test Suite', () => {
     const port = address.port;
     const baseUrl = `http://127.0.0.1:${port}`;
 
+    const token = signToken({ userId: 'usr_admin', role: 'ADMIN', email: 'admin@projectxray.ai' });
+    const authHeaders = { Authorization: `Bearer ${token}` };
+
     try {
       // 1. GET /api/evaluations/:id/score
-      const resScore = await fetch(`${baseUrl}/api/evaluations/${evalId}/score`);
+      const resScore = await fetch(`${baseUrl}/api/evaluations/${evalId}/score`, { headers: authHeaders });
       assert.strictEqual(resScore.status, 200);
       const jsonScore: any = await resScore.json();
       assert.strictEqual(jsonScore.success, true);
@@ -227,27 +231,27 @@ describe('Phase 9: AI Jury + Master Scoring Engine Test Suite', () => {
       assert.strictEqual(jsonScore.data.verdict, 'STRONG');
 
       // 2. GET /api/evaluations/:id/score/breakdown
-      const resBreakdown = await fetch(`${baseUrl}/api/evaluations/${evalId}/score/breakdown`);
+      const resBreakdown = await fetch(`${baseUrl}/api/evaluations/${evalId}/score/breakdown`, { headers: authHeaders });
       assert.strictEqual(resBreakdown.status, 200);
       const jsonBreakdown: any = await resBreakdown.json();
       assert.strictEqual(jsonBreakdown.success, true);
       assert.strictEqual(jsonBreakdown.data.categoryScores.length, 8);
 
       // 3. GET /api/evaluations/:id/score/confidence
-      const resConf = await fetch(`${baseUrl}/api/evaluations/${evalId}/score/confidence`);
+      const resConf = await fetch(`${baseUrl}/api/evaluations/${evalId}/score/confidence`, { headers: authHeaders });
       assert.strictEqual(resConf.status, 200);
       const jsonConf: any = await resConf.json();
       assert.strictEqual(jsonConf.data.overallConfidence, 86);
       assert.strictEqual(jsonConf.data.confidenceLevel, 'HIGH');
 
       // 4. GET /api/evaluations/:id/score/evidence-coverage
-      const resCov = await fetch(`${baseUrl}/api/evaluations/${evalId}/score/evidence-coverage`);
+      const resCov = await fetch(`${baseUrl}/api/evaluations/${evalId}/score/evidence-coverage`, { headers: authHeaders });
       assert.strictEqual(resCov.status, 200);
       const jsonCov: any = await resCov.json();
       assert.strictEqual(jsonCov.data.overallCoverage, 81);
 
       // 5. GET /api/evaluations/:id/jury
-      const resJury = await fetch(`${baseUrl}/api/evaluations/${evalId}/jury`);
+      const resJury = await fetch(`${baseUrl}/api/evaluations/${evalId}/jury`, { headers: authHeaders });
       assert.strictEqual(resJury.status, 200);
       const jsonJury: any = await resJury.json();
       assert.strictEqual(jsonJury.success, true);
@@ -258,7 +262,7 @@ describe('Phase 9: AI Jury + Master Scoring Engine Test Suite', () => {
       // 6. POST /api/evaluations/:id/score/simulate
       const resSim = await fetch(`${baseUrl}/api/evaluations/${evalId}/score/simulate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           categoryScores: {
             problemNeed: 95,
@@ -271,20 +275,20 @@ describe('Phase 9: AI Jury + Master Scoring Engine Test Suite', () => {
       assert.strictEqual(jsonSim.data.label, 'SIMULATION - NOT OFFICIAL SCORE');
 
       // 7. GET /api/evaluations/:id/history
-      const resHist = await fetch(`${baseUrl}/api/evaluations/${evalId}/history`);
+      const resHist = await fetch(`${baseUrl}/api/evaluations/${evalId}/history`, { headers: authHeaders });
       assert.strictEqual(resHist.status, 200);
       const jsonHist: any = await resHist.json();
       assert.ok(jsonHist.data.length >= 3, 'Must contain v1, v2, v3 history');
 
       // 8. GET /api/evaluations/compare
-      const resComp = await fetch(`${baseUrl}/api/evaluations/compare?ids=eval_smart-road-vision,eval_medi-drone-transport`);
+      const resComp = await fetch(`${baseUrl}/api/evaluations/compare?ids=eval_smart-road-vision,eval_medi-drone-transport`, { headers: authHeaders });
       assert.strictEqual(resComp.status, 200);
       const jsonComp: any = await resComp.json();
       assert.strictEqual(jsonComp.success, true);
       assert.ok(jsonComp.data.length >= 1);
 
       // 9. GET /api/rubrics
-      const resRub = await fetch(`${baseUrl}/api/rubrics`);
+      const resRub = await fetch(`${baseUrl}/api/rubrics`, { headers: authHeaders });
       assert.strictEqual(resRub.status, 200);
       const jsonRub: any = await resRub.json();
       assert.ok(jsonRub.data.length >= 1);

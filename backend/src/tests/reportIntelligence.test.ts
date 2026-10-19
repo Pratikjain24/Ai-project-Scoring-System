@@ -5,9 +5,12 @@ import { app } from '../server';
 import { ReportEngine } from '../report/reportEngine';
 import { ReportRepository } from '../repositories/reportRepository';
 import { PdfGenerator } from '../report/pdfGenerator';
+import { signToken } from '../services/tokenService';
+import { seedDatabase } from '../db/seed';
 
 test('Phase 10: Final Intelligence Report + Evidence Explorer Test Suite', async (t) => {
   const evalId = 'eval_smart-road-vision';
+  await seedDatabase();
 
   await t.test('1. ReportEngine generates complete 22-section report with exact Master Score & Verdict', () => {
     const report = ReportEngine.generate(evalId, 3);
@@ -167,40 +170,43 @@ test('Phase 10: Final Intelligence Report + Evidence Explorer Test Suite', async
     const port = address.port;
     const baseUrl = `http://127.0.0.1:${port}`;
 
+    const token = signToken({ userId: 'usr_admin', role: 'ADMIN', email: 'admin@projectxray.ai' });
+    const authHeaders = { Authorization: `Bearer ${token}` };
+
     try {
       // GET report
-      const repRes = await fetch(`${baseUrl}/api/evaluations/${evalId}/report`);
+      const repRes = await fetch(`${baseUrl}/api/evaluations/${evalId}/report`, { headers: authHeaders });
       assert.equal(repRes.status, 200);
       const repJson = await repRes.json();
       assert.equal(repJson.success, true);
       assert.equal(repJson.data.overallScore, 83.7);
 
       // GET versions
-      const verRes = await fetch(`${baseUrl}/api/evaluations/${evalId}/report/versions`);
+      const verRes = await fetch(`${baseUrl}/api/evaluations/${evalId}/report/versions`, { headers: authHeaders });
       assert.equal(verRes.status, 200);
       const verJson = await verRes.json();
       assert.ok(verJson.data.length >= 3);
 
       // GET compare
-      const compRes = await fetch(`${baseUrl}/api/evaluations/${evalId}/report/compare?v1=1&v2=3`);
+      const compRes = await fetch(`${baseUrl}/api/evaluations/${evalId}/report/compare?v1=1&v2=3`, { headers: authHeaders });
       assert.equal(compRes.status, 200);
       const compJson = await compRes.json();
       assert.equal(compJson.data.scoreDifference, 7.4);
 
       // GET evidence explorer
-      const evRes = await fetch(`${baseUrl}/api/evaluations/${evalId}/report/evidence?query=Jetson`);
+      const evRes = await fetch(`${baseUrl}/api/evaluations/${evalId}/report/evidence?query=Jetson`, { headers: authHeaders });
       assert.equal(evRes.status, 200);
       const evJson = await evRes.json();
       assert.ok(evJson.data.length > 0);
 
       // GET sources
-      const srcRes = await fetch(`${baseUrl}/api/evaluations/${evalId}/report/sources`);
+      const srcRes = await fetch(`${baseUrl}/api/evaluations/${evalId}/report/sources`, { headers: authHeaders });
       assert.equal(srcRes.status, 200);
       const srcJson = await srcRes.json();
       assert.ok(srcJson.data.length > 0);
 
       // GET PDF (HTML format)
-      const pdfRes = await fetch(`${baseUrl}/api/evaluations/${evalId}/report/pdf`);
+      const pdfRes = await fetch(`${baseUrl}/api/evaluations/${evalId}/report/pdf`, { headers: authHeaders });
       assert.equal(pdfRes.status, 200);
       const htmlText = await pdfRes.text();
       assert.ok(htmlText.includes('<!DOCTYPE html>'));
@@ -209,7 +215,7 @@ test('Phase 10: Final Intelligence Report + Evidence Explorer Test Suite', async
       // POST create share
       const shareRes = await fetch(`${baseUrl}/api/evaluations/${evalId}/report/share`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ expiresInDays: 7 }),
       });
       assert.equal(shareRes.status, 201);
@@ -225,6 +231,7 @@ test('Phase 10: Final Intelligence Report + Evidence Explorer Test Suite', async
       // DELETE revoke share
       const revRes = await fetch(`${baseUrl}/api/report-share/${shareJson.data.id}`, {
         method: 'DELETE',
+        headers: authHeaders,
       });
       assert.equal(revRes.status, 200);
 

@@ -5,6 +5,9 @@ import { app } from '../server';
 import { db } from '../db/database';
 import { LiveJuryEngine } from '../live/liveJuryEngine';
 import { LiveJuryRepository } from '../repositories/liveJuryRepository';
+import { AdminController } from '../controllers/adminController';
+import { signToken } from '../services/tokenService';
+import type { LivePresenterTrackingMetrics } from '../models/liveJury';
 
 test('Phase 11: Live Camera AI Jury Engine Test Suite', async (t) => {
   const repo = new LiveJuryRepository();
@@ -201,10 +204,12 @@ test('Phase 11: Live Camera AI Jury Engine Test Suite', async (t) => {
     await new Promise<void>((resolve) => server.listen(0, resolve));
     const port = (server.address() as any).port;
     const base = `http://localhost:${port}/api/evaluations/${evaluationId}/live`;
+    const token = signToken({ userId: 'usr_admin', role: 'ADMIN', email: 'admin@projectxray.ai' });
+    const authHeaders = { Authorization: `Bearer ${token}` };
 
     try {
       // 1. GET /status
-      const statusRes = await fetch(`${base}/status`);
+      const statusRes = await fetch(`${base}/status`, { headers: authHeaders });
       assert.strictEqual(statusRes.status, 200);
       const statusData = await statusRes.json();
       assert.ok(statusData.data.session);
@@ -213,7 +218,7 @@ test('Phase 11: Live Camera AI Jury Engine Test Suite', async (t) => {
       // 2. POST /start
       const startRes = await fetch(`${base}/start`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({ role: 'JUDGE', mockMode: true })
       });
       assert.strictEqual(startRes.status, 200);
@@ -221,38 +226,38 @@ test('Phase 11: Live Camera AI Jury Engine Test Suite', async (t) => {
       assert.strictEqual(startData.data.session.status, 'LIVE');
 
       // 3. GET /events
-      const eventsRes = await fetch(`${base}/events`);
+      const eventsRes = await fetch(`${base}/events`, { headers: authHeaders });
       assert.strictEqual(eventsRes.status, 200);
       const eventsData = await eventsRes.json();
       assert.ok(Array.isArray(eventsData.data));
       assert.ok(eventsData.data.length > 0);
 
       // 4. GET /transcript
-      const transRes = await fetch(`${base}/transcript`);
+      const transRes = await fetch(`${base}/transcript`, { headers: authHeaders });
       assert.strictEqual(transRes.status, 200);
       const transData = await transRes.json();
       assert.ok(Array.isArray(transData.data));
 
       // 5. GET /observations
-      const obsRes = await fetch(`${base}/observations`);
+      const obsRes = await fetch(`${base}/observations`, { headers: authHeaders });
       assert.strictEqual(obsRes.status, 200);
       const obsData = await obsRes.json();
       assert.ok(Array.isArray(obsData.data));
 
       // 6. GET /claims
-      const claimsRes = await fetch(`${base}/claims`);
+      const claimsRes = await fetch(`${base}/claims`, { headers: authHeaders });
       assert.strictEqual(claimsRes.status, 200);
       const claimsData = await claimsRes.json();
       assert.ok(Array.isArray(claimsData.data));
 
       // 7. GET /demo
-      const demoRes = await fetch(`${base}/demo`);
+      const demoRes = await fetch(`${base}/demo`, { headers: authHeaders });
       assert.strictEqual(demoRes.status, 200);
       const demoData = await demoRes.json();
       assert.ok(Array.isArray(demoData.data));
 
       // 8. GET /questions
-      const qRes = await fetch(`${base}/questions`);
+      const qRes = await fetch(`${base}/questions`, { headers: authHeaders });
       assert.strictEqual(qRes.status, 200);
       const qData = await qRes.json();
       assert.ok(Array.isArray(qData.data));
@@ -260,7 +265,7 @@ test('Phase 11: Live Camera AI Jury Engine Test Suite', async (t) => {
       // 9. POST /notes
       const noteRes = await fetch(`${base}/notes`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           note: 'REST test note: Jetson Orin thermal performance verified',
           flaggedConcern: false,
@@ -272,18 +277,18 @@ test('Phase 11: Live Camera AI Jury Engine Test Suite', async (t) => {
       assert.strictEqual(noteData.data.isBookmarked, true);
 
       // 10. POST /pause & /resume
-      const pauseRes = await fetch(`${base}/pause`, { method: 'POST' });
+      const pauseRes = await fetch(`${base}/pause`, { method: 'POST', headers: authHeaders });
       assert.strictEqual(pauseRes.status, 200);
       const pauseData = await pauseRes.json();
       assert.strictEqual(pauseData.data.status, 'PAUSED');
 
-      const resumeRes = await fetch(`${base}/resume`, { method: 'POST' });
+      const resumeRes = await fetch(`${base}/resume`, { method: 'POST', headers: authHeaders });
       assert.strictEqual(resumeRes.status, 200);
       const resumeData = await resumeRes.json();
       assert.strictEqual(resumeData.data.status, 'LIVE');
 
       // 11. POST /end
-      const endRes = await fetch(`${base}/end`, { method: 'POST' });
+      const endRes = await fetch(`${base}/end`, { method: 'POST', headers: authHeaders });
       assert.strictEqual(endRes.status, 200);
       const endData = await endRes.json();
       assert.strictEqual(endData.data.finalScore, 83.7);
@@ -292,4 +297,189 @@ test('Phase 11: Live Camera AI Jury Engine Test Suite', async (t) => {
       server.close();
     }
   });
+
+  await t.test('11. Real-Time Presenter Face & Gaze Tracking: detects looking down and diverted gaze', () => {
+    const session = repo.getOrCreateSession(evaluationId);
+
+    // Telemetry: presenter looking down at notes (eye contact 30%)
+    const downTelemetry: LivePresenterTrackingMetrics = {
+      faceDetected: true,
+      faceBoundingBox: { x: 100, y: 50, width: 120, height: 150 },
+      gazeStatus: 'LOOKING_DOWN',
+      eyeContactScore: 30,
+      headPose: { yaw: 2, pitch: 18, roll: 0 },
+      postureStatus: 'UPRIGHT',
+      postureStability: 90,
+      gestureActivity: 'OPTIMAL',
+      slideNumber: 2,
+      slideDwellTimeSeconds: 40,
+      slideTransitionDetected: false,
+      lightingQuality: 'GOOD',
+      timestampMs: Date.now()
+    };
+
+    const res = engine.ingestVisualTelemetry(session.id, downTelemetry, 260);
+    assert.ok(res.event);
+    assert.strictEqual(res.event.eventType, 'PRESENTER_CV_TELEMETRY');
+
+    const events = repo.getEvents(session.id);
+    const gazeWarning = events.find(e => e.eventType === 'GAZE_WARNING');
+    assert.ok(gazeWarning, 'Expected GAZE_WARNING event when presenter looks down at notes');
+    assert.ok(gazeWarning.description.includes('eye-contact dipped to 30%'));
+
+    const obs = repo.getObservations(session.id);
+    const gazeObs = obs.find(o => o.title.includes('Eye Contact Warning'));
+    assert.ok(gazeObs);
+  });
+
+  await t.test('12. Posture & Ergonomics Analysis: flags slumped presenter posture', () => {
+    const session = repo.getOrCreateSession(evaluationId);
+
+    const slumpedTelemetry: LivePresenterTrackingMetrics = {
+      faceDetected: true,
+      faceBoundingBox: { x: 90, y: 110, width: 100, height: 110 },
+      gazeStatus: 'DIRECT',
+      eyeContactScore: 82,
+      headPose: { yaw: 0, pitch: 8, roll: 2 },
+      postureStatus: 'SLUMPED',
+      postureStability: 48,
+      gestureActivity: 'LOW',
+      slideNumber: 2,
+      slideDwellTimeSeconds: 70,
+      slideTransitionDetected: false,
+      lightingQuality: 'GOOD',
+      timestampMs: Date.now()
+    };
+
+    engine.ingestVisualTelemetry(session.id, slumpedTelemetry, 275);
+
+    const events = repo.getEvents(session.id);
+    const postureAlert = events.find(e => e.eventType === 'POSTURE_ALERT');
+    assert.ok(postureAlert, 'Expected POSTURE_ALERT event when presenter slumps');
+    assert.ok(postureAlert.description.includes('slumped'));
+
+    const obs = repo.getObservations(session.id);
+    const postureObs = obs.find(o => o.title.includes('Ergonomic Alert: Presenter Slumping'));
+    assert.ok(postureObs);
+  });
+
+  await t.test('13. Slide Change Detection & Dwell Time Pacing: alerts on rushed slides (<15s)', () => {
+    const session = repo.getOrCreateSession(evaluationId);
+
+    // Slide 3 rushed transition (dwell time 11s)
+    const rushedSlideTelemetry: LivePresenterTrackingMetrics = {
+      faceDetected: true,
+      gazeStatus: 'DIRECT',
+      eyeContactScore: 88,
+      headPose: { yaw: 0, pitch: 0, roll: 0 },
+      postureStatus: 'UPRIGHT',
+      postureStability: 92,
+      gestureActivity: 'OPTIMAL',
+      slideNumber: 3,
+      slideDwellTimeSeconds: 11,
+      slideTransitionDetected: true,
+      lightingQuality: 'GOOD',
+      timestampMs: Date.now()
+    };
+
+    engine.ingestVisualTelemetry(session.id, rushedSlideTelemetry, 290);
+
+    const events = repo.getEvents(session.id);
+    const slideTransition = events.find(e => e.eventType === 'SLIDE_TRANSITION' && e.metadata?.slideNumber === 3);
+    assert.ok(slideTransition, 'Expected SLIDE_TRANSITION event');
+    assert.strictEqual(slideTransition.metadata?.isRushed, true);
+
+    const obs = repo.getObservations(session.id);
+    const rushedObs = obs.find(o => o.title.includes('Rushed (<15s)'));
+    assert.ok(rushedObs, 'Expected observation warning for rushed slide transition');
+  });
+
+  await t.test('14. REST API Endpoint: POST /telemetry updates session snapshot with visual metrics', async () => {
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const port = (server.address() as any).port;
+    const base = `http://localhost:${port}/api/evaluations/${evaluationId}/live`;
+
+    try {
+      const telemetryPayload: LivePresenterTrackingMetrics = {
+        faceDetected: true,
+        faceBoundingBox: { x: 120, y: 40, width: 140, height: 160 },
+        gazeStatus: 'DIRECT',
+        eyeContactScore: 94,
+        headPose: { yaw: 1.2, pitch: -2.1, roll: 0.2 },
+        postureStatus: 'UPRIGHT',
+        postureStability: 96,
+        gestureActivity: 'OPTIMAL',
+        slideNumber: 4,
+        slideDwellTimeSeconds: 52,
+        slideTransitionDetected: true,
+        lightingQuality: 'GOOD',
+        timestampMs: Date.now()
+      };
+
+      const token = signToken({ userId: 'usr_admin', role: 'ADMIN', email: 'admin@projectxray.ai' });
+      const res = await fetch(`${base}/telemetry`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ telemetry: telemetryPayload, elapsedSeconds: 310 })
+      });
+
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.success, true);
+      assert.ok(json.data.session);
+      assert.ok(json.data.event);
+      assert.ok(json.data.snapshot);
+      assert.strictEqual(json.data.snapshot.visualMetrics.gazeStatus, 'DIRECT');
+      assert.strictEqual(json.data.snapshot.visualMetrics.eyeContactScore, 94);
+      assert.ok(json.data.snapshot.visualTelemetryCount >= 1);
+    } finally {
+      server.close();
+    }
+  });
+
+  await t.test('15. Admin Live Jury Diagnostics & On-Demand CV Simulation Endpoints', async () => {
+    // 1. Diagnostics status endpoint
+    let statusResponse: any = null;
+    const mockRes1: any = {
+      status: () => mockRes1,
+      json: (data: any) => { statusResponse = data; },
+    };
+    AdminController.getLiveJuryStatus({} as any, mockRes1);
+
+    assert.strictEqual(statusResponse.success, true);
+    assert.strictEqual(statusResponse.data.engineStatus, 'ONLINE');
+    assert.ok(statusResponse.data.trackingCapabilities.includes('GAZE_VECTOR_ESTIMATION'));
+    assert.ok(statusResponse.data.trackingCapabilities.includes('POSTURE_ERGONOMICS_CLASSIFICATION'));
+    assert.ok(statusResponse.data.trackingCapabilities.includes('SLIDE_TRANSITION_DETECTION'));
+
+    // 2. On-demand CV Simulation endpoint
+    let simResponse: any = null;
+    const mockRes2: any = {
+      status: () => mockRes2,
+      json: (data: any) => { simResponse = data; },
+    };
+    const mockReq2: any = {
+      body: {
+        evaluationId,
+        faceDetected: true,
+        gazeStatus: 'DIRECT',
+        eyeContactScore: 92,
+        postureStatus: 'UPRIGHT',
+        postureStability: 95,
+        slideNumber: 5,
+        slideDwellTimeSeconds: 60,
+        slideTransitionDetected: false,
+        elapsedSeconds: 360
+      }
+    };
+
+    AdminController.simulateLiveJuryCv(mockReq2, mockRes2);
+
+    assert.strictEqual(simResponse.success, true);
+    assert.ok(simResponse.data.event);
+    assert.strictEqual(simResponse.data.snapshot.visualMetrics.slideNumber, 5);
+    assert.strictEqual(simResponse.data.snapshot.visualMetrics.postureStatus, 'UPRIGHT');
+  });
 });
+

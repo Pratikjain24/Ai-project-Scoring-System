@@ -159,6 +159,8 @@ describe('Phase 4: Multimodal Video + Audio + Presentation Analysis Engine Test 
     assert.ok(bundle.claimDemoMatches.length >= 3);
     assert.ok(bundle.presentationMetrics !== null);
     assert.ok(bundle.timeline.length >= 15);
+    assert.ok(bundle.demoMilestones && bundle.demoMilestones.length >= 3, 'Demo milestones should be detected');
+    assert.ok(bundle.videoAnomalies && bundle.videoAnomalies.length >= 1, 'Video anomalies should be detected');
 
     // Timeline must be sorted by timestamp
     for (let i = 0; i < bundle.timeline.length - 1; i++) {
@@ -169,6 +171,8 @@ describe('Phase 4: Multimodal Video + Audio + Presentation Analysis Engine Test 
     const fetched = MultimodalRepository.getMultimodalAnalysisBundle(testVidId);
     assert.ok(fetched);
     assert.strictEqual(fetched.video.id, testVidId);
+    assert.ok(fetched.demoMilestones && fetched.demoMilestones.length >= 3);
+    assert.ok(fetched.videoAnomalies && fetched.videoAnomalies.length >= 1);
   });
 
   it('8. MultimodalPipeline handles simulated step failures cleanly with status FAILED', async () => {
@@ -212,5 +216,19 @@ describe('Phase 4: Multimodal Video + Audio + Presentation Analysis Engine Test 
 
     const evalBundle = MultimodalRepository.getEvaluationVideoAnalysis(evalId);
     assert.ok(evalBundle, 'Evaluation bundle must exist');
+  });
+
+  it('10. VisualObservationService accurately detects demo milestones and video anomalies', () => {
+    const targetVidId = 'vid_smart_road_vision_benchmark';
+    const milestones = VisualObservationService.detectDemoMilestones(targetVidId, evalId);
+    assert.ok(Array.isArray(milestones));
+    assert.ok(milestones.length >= 3);
+    const verifiedMilestones = milestones.filter((m) => m.status === 'VERIFIED');
+    assert.ok(verifiedMilestones.length >= 2, 'Should have multiple verified milestones');
+
+    const anomalies = VisualObservationService.detectVideoAnomalies(targetVidId, evalId);
+    assert.ok(Array.isArray(anomalies));
+    assert.ok(anomalies.length >= 1);
+    assert.ok(anomalies.some((a) => a.severity === 'HIGH' || a.severity === 'MEDIUM'));
   });
 });

@@ -18,9 +18,13 @@ import { UrlSecurity } from '../services/urlSecurity';
 import { SystemHealthService } from '../services/systemHealthService';
 import { FeatureFlagService } from '../services/featureFlagService';
 import { UsageTracker } from '../services/usageTracker';
+import { signToken } from '../services/tokenService';
+import { ENV } from '../config/env';
+import { seedDatabase } from '../db/seed';
 
 test('Phase 12: Full System Integration & Production Hardening Test Suite', async (t) => {
   const evaluationId = 'eval_smart-road-vision';
+  await seedDatabase();
 
   // 1. End-to-End Orchestrator Pipeline
   await t.test('1. EvaluationOrchestrator runs pipeline through all stages to READY_FOR_REVIEW', async () => {
@@ -235,36 +239,101 @@ test('Phase 12: Full System Integration & Production Hardening Test Suite', asyn
     const adminBase = `http://localhost:${port}/api/admin`;
 
     try {
+      const adminToken = signToken(
+        { userId: 'usr_admin', role: 'ADMIN', email: 'admin@test.com' },
+        ENV.JWT_SECRET
+      );
+      const adminHeaders = {
+        'Authorization': `Bearer ${adminToken}`,
+        'Content-Type': 'application/json',
+      };
+
       // Status
-      const resStatus = await fetch(`${base}/orchestrate/status`);
+      const resStatus = await fetch(`${base}/orchestrate/status`, { headers: adminHeaders });
       assert.strictEqual(resStatus.status, 200);
       const jsonStatus = await resStatus.json();
       assert.strictEqual(jsonStatus.success, true);
       assert.ok(jsonStatus.data.totalStages > 0);
 
       // Integrity
-      const resInteg = await fetch(`${base}/integrity`);
+      const resInteg = await fetch(`${base}/integrity`, { headers: adminHeaders });
       assert.strictEqual(resInteg.status, 200);
       const jsonInteg = await resInteg.json();
       assert.strictEqual(jsonInteg.data.isValid, true);
 
-      // Admin Health
-      const resHealth = await fetch(`${adminBase}/health`);
+      // Admin Health (Requires Valid ADMIN JWT)
+      const resHealth = await fetch(`${adminBase}/health`, { headers: adminHeaders });
       assert.strictEqual(resHealth.status, 200);
       const jsonHealth = await resHealth.json();
       assert.strictEqual(jsonHealth.data.status, 'HEALTHY');
 
-      // Admin Usage
-      const resUsage = await fetch(`${adminBase}/usage`);
+      // Admin Usage (Requires Valid ADMIN JWT)
+      const resUsage = await fetch(`${adminBase}/usage`, { headers: adminHeaders });
       assert.strictEqual(resUsage.status, 200);
       const jsonUsage = await resUsage.json();
       assert.ok(jsonUsage.data.totalOperations >= 0);
 
-      // Feature Flags
-      const resFlags = await fetch(`${adminBase}/feature-flags`);
+      // Feature Flags (Requires Valid ADMIN JWT)
+      const resFlags = await fetch(`${adminBase}/feature-flags`, { headers: adminHeaders });
       assert.strictEqual(resFlags.status, 200);
       const jsonFlags = await resFlags.json();
       assert.ok(jsonFlags.data.length >= 5);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
+  // 14. Scenario 2: Authentication Catastrophe Defense
+  await t.test('14. Security Defense: Scenario 2 - string matching exploit immunity and JWT verification', async () => {
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const port = (server.address() as any).port;
+    const adminUrl = `http://localhost:${port}/api/admin/audit-logs`;
+
+    try {
+      // Exploit Attempt 1: String matching attack (Bearer my_admin_token_lol)
+      const resExploit = await fetch(adminUrl, {
+        headers: { 'Authorization': 'Bearer my_admin_token_lol' },
+      });
+      assert.strictEqual(resExploit.status, 401, 'Naive admin string token must be rejected with 401');
+      const jsonExploit = await resExploit.json();
+      assert.strictEqual(jsonExploit.success, false);
+      assert.strictEqual(jsonExploit.error.code, 'MALFORMED_TOKEN');
+
+      // Exploit Attempt 2: Simple 'admin' string token
+      const resAdminStr = await fetch(adminUrl, {
+        headers: { 'Authorization': 'Bearer admin' },
+      });
+      assert.strictEqual(resAdminStr.status, 401, 'Plain "admin" token must be rejected with 401');
+
+      // Exploit Attempt 3: No authorization header provided to sensitive admin endpoint
+      const resNoHeader = await fetch(adminUrl);
+      assert.strictEqual(resNoHeader.status, 401, 'Unauthenticated request to admin endpoint must be rejected with 401');
+
+      // Privilege Escalation Attempt: Student token trying to access Admin audit logs
+      const studentToken = signToken(
+        { userId: 'usr_student_alex', role: 'STUDENT', email: 'alex.chen@mit.edu' },
+        ENV.JWT_SECRET
+      );
+      const resStudent = await fetch(adminUrl, {
+        headers: { 'Authorization': `Bearer ${studentToken}` },
+      });
+      assert.strictEqual(resStudent.status, 403, 'Valid STUDENT JWT must be forbidden from admin audit-logs with 403');
+      const jsonStudent = await resStudent.json();
+      assert.strictEqual(jsonStudent.error.code, 'FORBIDDEN');
+
+      // Authorized Access: Cryptographically signed ADMIN token succeeds
+      const adminToken = signToken(
+        { userId: 'usr_admin', role: 'ADMIN', email: 'admin@projectxray.ai' },
+        ENV.JWT_SECRET
+      );
+      const resAdmin = await fetch(adminUrl, {
+        headers: { 'Authorization': `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resAdmin.status, 200, 'Cryptographically signed ADMIN JWT must succeed with 200');
+      const jsonAdmin = await resAdmin.json();
+      assert.strictEqual(jsonAdmin.success, true);
+      assert.ok(Array.isArray(jsonAdmin.data));
     } finally {
       await new Promise((resolve) => server.close(resolve));
     }
