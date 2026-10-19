@@ -1,0 +1,177 @@
+# =========================================================================
+# PROJECTX-RAY AI — PRODUCTION DOCKER COMPOSE ORCHESTRATION
+# Services: App (Node 22 + React 19) + Redis + PostgreSQL + MinIO Object Store
+# =========================================================================
+
+version: '3.8'
+
+services:
+  # -----------------------------------------------------------------------
+  # 1. Main Application Service (Vite SPA + Express API + Specialist Agents)
+  # -----------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: projectxray-ai:latest
+    container_name: projectxray-app
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      # Database Dialect: PostgreSQL for scalable cloud concurrency
+      - DATABASE_DIALECT=postgres
+      - DATABASE_URL=postgresql://projectxray:xray_secure_password_2026@postgres:5432/projectxray
+      - PG_HOST=postgres
+      - PG_PORT=5432
+      - PG_DATABASE=projectxray
+      - PG_USER=projectxray
+      - PG_PASSWORD=xray_secure_password_2026
+      # Distributed Redis & BullMQ Queue
+      - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # Cloud Object Storage (MinIO S3-compatible service)
+      - STORAGE_DRIVER=minio
+      - STORAGE_S3_ENDPOINT=http://minio:9000
+      - STORAGE_S3_BUCKET=projectxray-uploads
+      - STORAGE_S3_ACCESS_KEY=minioadmin
+      - STORAGE_S3_SECRET_KEY=minioadmin
+      - STORAGE_S3_REGION=us-east-1
+      - STORAGE_S3_FORCE_PATH_STYLE=true
+      # Security & JWT Configuration
+      - JWT_SECRET=projectxray-super-secure-production-key-must-be-32-chars-long
+      - JWT_ALGORITHM=RS256
+      - CORS_ORIGIN=http://localhost:3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - app-uploads:/app/uploads
+      - app-data:/app/data
+    networks:
+      - projectxray-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3001/api/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # -----------------------------------------------------------------------
+  # 2. PostgreSQL 16 Relational Database Service
+  # -----------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: projectxray-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: projectxray
+      POSTGRES_USER: projectxray
+      POSTGRES_PASSWORD: xray_secure_password_2026
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - projectxray-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U projectxray -d projectxray"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # -----------------------------------------------------------------------
+  # 3. Redis 7 Distributed Cache & BullMQ Queue Service
+  # -----------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: projectxray-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - projectxray-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # -----------------------------------------------------------------------
+  # 4. MinIO S3-Compatible Cloud Object Storage Service
+  # -----------------------------------------------------------------------
+  minio:
+    image: minio/minio:latest
+    container_name: projectxray-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"   # S3 API endpoint
+      - "9001:9001"   # MinIO Web Console UI
+    networks:
+      - projectxray-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # -----------------------------------------------------------------------
+  # 5. MinIO Provisioning Helper (Auto-creates S3 bucket on initialization)
+  # -----------------------------------------------------------------------
+  minio-init:
+    image: minio/mc:latest
+    container_name: projectxray-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set local http://minio:9000 minioadmin minioadmin;
+      /usr/bin/mc mb local/projectxray-uploads || true;
+      /usr/bin/mc anonymous set download local/projectxray-uploads || true;
+      exit 0;
+      "
+    networks:
+      - projectxray-net
+
+# -------------------------------------------------------------------------
+# Persistent Volume Declarations
+# -------------------------------------------------------------------------
+volumes:
+  postgres-data:
+    name: projectxray-postgres-data
+  redis-data:
+    name: projectxray-redis-data
+  minio-data:
+    name: projectxray-minio-data
+  app-uploads:
+    name: projectxray-app-uploads
+  app-data:
+    name: projectxray-app-data
+
+# -------------------------------------------------------------------------
+# Network Definitions
+# -------------------------------------------------------------------------
+networks:
+  projectxray-net:
+    name: projectxray-network
+    driver: bridge

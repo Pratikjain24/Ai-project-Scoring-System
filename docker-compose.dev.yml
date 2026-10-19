@@ -1,0 +1,28 @@
+# =========================================================================
+# PROJECTX-RAY AI — DEVELOPMENT DOCKER COMPOSE OVERRIDE
+# Mounts local workspace for live hot-reloading across frontend and backend
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# =========================================================================
+
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    command: ["npm", "run", "dev:all"]
+    environment:
+      - NODE_ENV=development
+      - MOCK_AI=true
+      - LOG_LEVEL=debug
+      - CORS_ORIGIN=http://localhost:5173
+    ports:
+      - "5173:5173"  # Vite HMR dev port
+      - "3001:3001"  # Express API port
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    healthcheck:
+      disable: true

@@ -1,0 +1,48 @@
+# =========================================================================
+# PROJECTX-RAY AI — DOCKER BUILD IGNORE RULES
+# Prevents host artifacts, binaries, and secrets from entering build context
+# =========================================================================
+
+# Dependencies & Build Outputs
+node_modules
+dist
+coverage
+build
+
+# Local Databases & State (Never bake local databases into images)
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+projectxray.db
+uploads/*
+!uploads/.gitkeep
+
+# Environment & Secrets
+.env
+.env.local
+.env.production
+.env.*.local
+*.pem
+*.key
+
+# Git & IDE Metadata
+.git
+.github
+.gitignore
+.gemini
+.vscode
+.idea
+
+# Logs & Temporary Files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+tmp
+temp
+scratch
+
+# Documentation & Reports
+*.md
+!README.md

@@ -5,9 +5,14 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react()],
   server: {
+    // Use 'localhost' instead of '0.0.0.0' to enable camera access
+    // Camera API requires HTTPS or localhost for security
+    // If you need network access, use HTTPS with SSL certificates
+    host: 'localhost',
+    port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'http://127.0.0.1:3001',
         changeOrigin: true,
       },
     },

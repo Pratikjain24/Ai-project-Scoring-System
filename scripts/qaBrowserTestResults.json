@@ -1,0 +1,157 @@
+{
+  "timestamp": "2026-10-13T06:44:24.915Z",
+  "pagesTested": [
+    {
+      "route": "/",
+      "redirectedTo": "http://127.0.0.1:5173/dashboard",
+      "status": "PASS"
+    },
+    {
+      "route": "/evaluations",
+      "heading": "Evaluation Catalog",
+      "rowsCount": 17,
+      "status": "PASS"
+    }
+  ],
+  "buttonsTested": [
+    {
+      "button": "Live Stream Modal",
+      "status": "PASS"
+    },
+    {
+      "button": "Command Center Modal",
+      "status": "FAIL"
+    }
+  ],
+  "tabsTested": [
+    {
+      "tab": "Project DNA",
+      "route": "/evaluations/smart-road-vision/project",
+      "renderedChars": 6210,
+      "status": "PASS"
+    },
+    {
+      "tab": "Technical",
+      "route": "/evaluations/smart-road-vision/technical",
+      "renderedChars": 12177,
+      "status": "PASS"
+    },
+    {
+      "tab": "Originality",
+      "route": "/evaluations/smart-road-vision/originality",
+      "renderedChars": 4536,
+      "status": "PASS"
+    },
+    {
+      "tab": "Claims",
+      "route": "/evaluations/smart-road-vision/claims",
+      "renderedChars": 13596,
+      "status": "PASS"
+    },
+    {
+      "tab": "Evidence Checklist",
+      "route": "/evaluations/smart-road-vision/checklist",
+      "renderedChars": 3602,
+      "status": "PASS"
+    },
+    {
+      "tab": "Research",
+      "route": "/evaluations/smart-road-vision/research",
+      "renderedChars": 31,
+      "status": "FAIL"
+    },
+    {
+      "tab": "Impact",
+      "route": "/evaluations/smart-road-vision/impact",
+      "error": "Navigation timeout of 20000 ms exceeded",
+      "status": "TIMEOUT_OR_ERROR"
+    },
+    {
+      "tab": "Presentation",
+      "route": "/evaluations/smart-road-vision/presentation",
+      "error": "Navigation timeout of 20000 ms exceeded",
+      "status": "TIMEOUT_OR_ERROR"
+    },
+    {
+      "tab": "AI Jury",
+      "route": "/evaluations/smart-road-vision/jury",
+      "renderedChars": 31,
+      "status": "FAIL"
+    },
+    {
+      "tab": "Live Jury",
+      "route": "/evaluations/smart-road-vision/live",
+      "renderedChars": 1289,
+      "status": "PASS"
+    },
+    {
+      "tab": "Doc Intelligence",
+      "route": "/evaluations/smart-road-vision/documents",
+      "renderedChars": 793,
+      "status": "PASS"
+    },
+    {
+      "tab": "Report",
+      "route": "/evaluations/smart-road-vision/report",
+      "renderedChars": 21429,
+      "status": "PASS"
+    }
+  ],
+  "workflowsTested": [],
+  "defectsFound": [
+    {
+      "id": "DEFECT-04",
+      "title": "Settings Page does not persist settings",
+      "location": "SettingsPage.tsx:30",
+      "details": "Settings are stored purely in local React state and reset on page refresh."
+    },
+    {
+      "id": "DEFECT-05",
+      "title": "Missing Public Shared Report Route (/share/report/:token)",
+      "location": "App.tsx:52",
+      "details": "Shared report token links fail with Route Not Found because the route is missing in React Router."
+    }
+  ],
+  "consoleErrors": [
+    {
+      "url": "http://127.0.0.1:5173/evaluations/smart-road-vision/research",
+      "message": "Failed to load research intelligence data: ApiError: Request to /evaluations/eval_smart-road-vision/research timed out after 15000ms"
+    },
+    {
+      "url": "http://127.0.0.1:5173/evaluations/smart-road-vision/research",
+      "message": "Failed to load research intelligence data: ApiError: Request to /evaluations/eval_smart-road-vision/research timed out after 15000ms"
+    },
+    {
+      "url": "http://127.0.0.1:5173/admin",
+      "message": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    },
+    {
+      "url": "http://127.0.0.1:5173/admin",
+      "message": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    },
+    {
+      "url": "http://127.0.0.1:5173/admin",
+      "message": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    },
+    {
+      "url": "http://127.0.0.1:5173/admin",
+      "message": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    },
+    {
+      "url": "http://127.0.0.1:5173/admin",
+      "message": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    },
+    {
+      "url": "http://127.0.0.1:5173/admin",
+      "message": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    },
+    {
+      "url": "http://127.0.0.1:5173/admin",
+      "message": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    },
+    {
+      "url": "http://127.0.0.1:5173/admin",
+      "message": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    }
+  ]
+}
