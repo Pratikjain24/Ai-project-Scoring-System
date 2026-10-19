@@ -8,7 +8,15 @@ import {
 } from 'lucide-react';
 import { INITIAL_LIVE_METRICS } from '../../data/liveJuryData';
 
-export const LiveMetricsPanel: React.FC = () => {
+export interface LiveMetricsPanelProps {
+  metrics?: typeof INITIAL_LIVE_METRICS;
+  aggregateScore?: number;
+}
+
+export const LiveMetricsPanel: React.FC<LiveMetricsPanelProps> = ({
+  metrics = INITIAL_LIVE_METRICS,
+  aggregateScore = 90.8,
+}) => {
   return (
     <div className="rounded-3xl bg-[#090D16] border border-white/10 p-5 shadow-2xl flex flex-col justify-between space-y-4">
       {/* Header with Demo Data badge */}
@@ -19,14 +27,18 @@ export const LiveMetricsPanel: React.FC = () => {
             Live AI Telemetry Metrics
           </h3>
         </div>
-        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30">
-          DEMO DATA
+        <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+          metrics === INITIAL_LIVE_METRICS
+            ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+            : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+        }`}>
+          {metrics === INITIAL_LIVE_METRICS ? 'DEMO DATA' : 'LIVE TELEMETRY'}
         </span>
       </div>
 
       {/* Metrics List */}
       <div className="space-y-3">
-        {INITIAL_LIVE_METRICS.map((metric) => (
+        {metrics.map((metric) => (
           <div
             key={metric.id}
             className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:border-white/15 transition-all text-xs font-mono space-y-1.5"
@@ -69,7 +81,7 @@ export const LiveMetricsPanel: React.FC = () => {
       {/* Summary Note */}
       <div className="p-2.5 rounded-xl bg-cyan-950/20 border border-cyan-500/20 text-[11px] font-mono text-cyan-300 flex items-center gap-2">
         <Sparkles className="w-3.5 h-3.5 shrink-0" />
-        <span>Aggregate Session Score: 90.8 / 100 (Tier 1 Run)</span>
+        <span>Aggregate Session Score: {aggregateScore} / 100 ({aggregateScore >= 90 ? 'Tier 1 Run' : aggregateScore >= 80 ? 'Tier 2 Recommended' : 'Tier 3 Incubation'})</span>
       </div>
     </div>
   );

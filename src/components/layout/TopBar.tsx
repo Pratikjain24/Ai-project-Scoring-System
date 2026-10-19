@@ -1,28 +1,39 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import {
-  Search,
-  Bell,
   Menu,
   ChevronRight,
-  CheckCircle2,
-  AlertTriangle,
-  FileText,
-  Command,
+  Shield,
+  ChevronDown,
+  Check,
+  LogIn,
+  UserPlus,
+  LogOut,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { useAuth } from '../../context/AuthContext';
 
 interface TopBarProps {
-  onOpenCommandPalette: () => void;
   onToggleMobileMenu: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
-  onOpenCommandPalette,
   onToggleMobileMenu,
 }) => {
   const location = useLocation();
-  const [showNotifications, setShowNotifications] = useState(false);
+  const [showPersonaMenu, setShowPersonaMenu] = useState(false);
+  const { currentUser, allPersonas, switchPersona, openAuthModal, logout, isAuthenticated } = useAuth();
+  const personaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (personaRef.current && !personaRef.current.contains(event.target as Node)) {
+        setShowPersonaMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Generate breadcrumbs from location path
   const pathParts = location.pathname.split('/').filter(Boolean);
@@ -37,30 +48,6 @@ export const TopBar: React.FC<TopBarProps> = ({
     }
     return 'ProjectX-Ray AI';
   };
-
-  const notifications = [
-    {
-      id: '1',
-      title: 'Smart Road Vision audit completed',
-      time: '12m ago',
-      type: 'success',
-      read: false,
-    },
-    {
-      id: '2',
-      title: 'MediTrack flagged 3 unverified clinical claims',
-      time: '1h ago',
-      type: 'warning',
-      read: false,
-    },
-    {
-      id: '3',
-      title: 'CyberShield benchmark telemetry verified',
-      time: '4h ago',
-      type: 'info',
-      read: true,
-    },
-  ];
 
   return (
     <header className="sticky top-0 z-30 h-16 bg-slate-950/80 dark:bg-slate-950/80 light:bg-white/90 backdrop-blur-md border-b border-slate-800/80 dark:border-slate-800/80 light:border-slate-200 px-4 sm:px-6 flex items-center justify-between transition-colors">
@@ -107,73 +94,135 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
       </div>
 
-      {/* Right: Quick Global Search, Notifications, Demo Pill */}
+      {/* Right: User menu and actions */}
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* Search trigger button */}
-        <button
-          type="button"
-          onClick={onOpenCommandPalette}
-          className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/80 dark:bg-slate-900/80 light:bg-slate-100 border border-slate-800 dark:border-slate-800 light:border-slate-300 text-xs text-slate-400 hover:text-slate-200 hover:border-slate-700 transition-all shadow-inner"
-        >
-          <Search className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="text-slate-400">Search projects, claims...</span>
-          <kbd className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-slate-800 dark:bg-slate-800 light:bg-slate-200 text-slate-400 border border-slate-700/60 flex items-center gap-0.5">
-            <Command className="w-2.5 h-2.5" /> K
-          </kbd>
-        </button>
 
-        {/* Mobile search icon */}
-        <button
-          type="button"
-          onClick={onOpenCommandPalette}
-          className="sm:hidden p-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-900"
-        >
-          <Search className="w-4 h-4 text-cyan-400" />
-        </button>
-
-        {/* Subtle Demo Data Label */}
-        <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cyan-950/40 border border-cyan-800/40 text-[10px] font-mono text-cyan-300">
-          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-          <span>Demo Intelligence Mode</span>
-        </div>
-
-        {/* Notifications Dropdown */}
-        <div className="relative">
+        {/* Institutional Persona / Role Switcher */}
+        <div className="relative" ref={personaRef}>
           <button
             type="button"
-            onClick={() => setShowNotifications(!showNotifications)}
-            className="relative p-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-900 transition-colors"
+            onClick={() => setShowPersonaMenu(!showPersonaMenu)}
+            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition-all text-left"
+            title="Switch Reviewer Persona"
           >
-            <Bell className="w-4 h-4" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-cyan-400 ring-2 ring-slate-950" />
+            <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center text-xs font-bold text-white shadow-inner">
+              {currentUser.avatarInitials}
+            </div>
+            <div className="hidden md:block text-left">
+              <div className="text-xs font-semibold text-slate-200 leading-tight flex items-center gap-1.5">
+                <span>{currentUser.name}</span>
+                <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono border ${currentUser.badgeColor}`}>
+                  {currentUser.role}
+                </span>
+              </div>
+              <div className="text-[10px] text-slate-400 truncate max-w-[140px]">
+                {currentUser.roleLabel}
+              </div>
+            </div>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
           </button>
 
-          {showNotifications && (
-            <div className="absolute right-0 mt-2 w-80 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl p-3 z-50 animate-fadeIn">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-800 text-xs font-semibold text-slate-300">
-                <span>Evaluation Notifications</span>
-                <span className="text-[10px] font-mono text-cyan-400">3 New</span>
+          {showPersonaMenu && (
+            <div className="absolute right-0 mt-2 w-80 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl p-2 z-50 animate-fadeIn space-y-2">
+              <div className="px-2 py-1.5 border-b border-slate-800/80">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-semibold text-slate-200 flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>User Authentication</span>
+                  </p>
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>{isAuthenticated ? 'Authenticated' : 'Demo Session'}</span>
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-0.5">HS256 JWT • HttpOnly 7-Day Refresh</p>
               </div>
 
-              <div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
-                {notifications.map((n) => (
-                  <div
-                    key={n.id}
-                    className={`p-2.5 rounded-lg text-xs transition-colors ${
-                      n.read ? 'bg-slate-950/40 opacity-70' : 'bg-slate-800/60 border border-slate-700/60'
-                    }`}
-                  >
-                    <div className="flex items-start gap-2">
-                      {n.type === 'success' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0 mt-0.5" />}
-                      {n.type === 'warning' && <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />}
-                      {n.type === 'info' && <FileText className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0 mt-0.5" />}
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-slate-200 leading-tight">{n.title}</p>
-                        <span className="text-[10px] text-slate-400 font-mono mt-1 block">{n.time}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+              {/* Action Buttons for Sign In / Register */}
+              <div className="grid grid-cols-2 gap-1.5 px-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    openAuthModal('LOGIN');
+                    setShowPersonaMenu(false);
+                  }}
+                  className="w-full text-xs h-8 justify-center gap-1.5 border-slate-700 bg-slate-950/60 hover:bg-slate-800 text-slate-200"
+                >
+                  <LogIn className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Sign In</span>
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    openAuthModal('REGISTER');
+                    setShowPersonaMenu(false);
+                  }}
+                  className="w-full text-xs h-8 justify-center gap-1.5 border-slate-700 bg-slate-950/60 hover:bg-slate-800 text-slate-200"
+                >
+                  <UserPlus className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Register</span>
+                </Button>
+              </div>
+
+              {/* Institutional Persona Switcher */}
+              <div className="pt-2 border-t border-slate-800/80">
+                <div className="px-2 pb-1.5 text-[10px] font-mono uppercase tracking-wider text-slate-400">
+                  Switch Viva Persona:
+                </div>
+                <div className="space-y-1">
+                  {allPersonas.map((p) => {
+                    const isSelected = p.id === currentUser.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          switchPersona(p.id);
+                          setShowPersonaMenu(false);
+                        }}
+                        className={`w-full text-left p-2 rounded-lg flex items-center justify-between transition-colors ${
+                          isSelected
+                            ? 'bg-slate-800/90 border border-cyan-500/30'
+                            : 'hover:bg-slate-800/50 border border-transparent'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-slate-300 shrink-0">
+                            {p.avatarInitials}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-semibold text-slate-200 truncate">{p.name}</span>
+                              <span className={`text-[8px] px-1 py-0.2 rounded font-mono border ${p.badgeColor}`}>
+                                {p.role}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 truncate">{p.organization}</p>
+                          </div>
+                        </div>
+                        {isSelected && <Check className="w-4 h-4 text-cyan-400 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Sign Out CTA */}
+              <div className="pt-2 border-t border-slate-800/80 px-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    logout();
+                    setShowPersonaMenu(false);
+                  }}
+                  className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/30 rounded-lg transition-colors"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign Out of Current Session</span>
+                </button>
               </div>
             </div>
           )}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Play,
   Pause,
@@ -50,12 +50,23 @@ export const MultimodalVideoAnalyzer: React.FC<MultimodalVideoAnalyzerProps> = (
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [selectedEventType, setSelectedEventType] = useState<string>('ALL');
   const [transcriptSearch, setTranscriptSearch] = useState<string>('');
-  const [activeSegment, setActiveSegment] = useState<VideoSegment | null>(null);
-  const [activeTranscript, setActiveTranscript] = useState<TranscriptSegment | null>(null);
 
-  const duration = video.durationSeconds || 600;
+  const duration = video?.durationSeconds || 600;
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
   const activeTranscriptRef = useRef<HTMLDivElement>(null);
+
+  // Derive active segment and transcript segment directly from currentTime
+  const activeSegment = useMemo(() => {
+    return (segments || []).find(
+      (s) => currentTime >= s.startTime && currentTime <= s.endTime
+    ) || null;
+  }, [currentTime, segments]);
+
+  const activeTranscript = useMemo(() => {
+    return (transcript || []).find(
+      (t) => currentTime >= t.startTime && currentTime <= t.endTime
+    ) || null;
+  }, [currentTime, transcript]);
 
   // Playback timer simulation
   useEffect(() => {
@@ -74,23 +85,13 @@ export const MultimodalVideoAnalyzer: React.FC<MultimodalVideoAnalyzerProps> = (
     return () => clearInterval(interval);
   }, [isPlaying, playbackSpeed, duration]);
 
-  // Synchronize active segment and transcript segment based on currentTime
-  useEffect(() => {
-    const currentSeg = segments.find(
-      (s) => currentTime >= s.startTime && currentTime <= s.endTime
-    );
-    setActiveSegment(currentSeg || null);
-
-    const currentTrans = transcript.find(
-      (t) => currentTime >= t.startTime && currentTime <= t.endTime
-    );
-    setActiveTranscript(currentTrans || null);
-  }, [currentTime, segments, transcript]);
-
   // Handle external seek requests
   useEffect(() => {
     if (initialTimestamp > 0) {
-      setCurrentTime(initialTimestamp);
+      const timer = setTimeout(() => {
+        setCurrentTime(initialTimestamp);
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [initialTimestamp]);
 

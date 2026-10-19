@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Mic, 
   MicOff, 
@@ -14,7 +14,10 @@ import {
   Flag, 
   MessageSquare, 
   Target, 
-  LogOut
+  LogOut,
+  Monitor,
+  Camera,
+  Tv
 } from 'lucide-react';
 import type { 
   LiveJurySession, 
@@ -27,9 +30,11 @@ import type {
   LiveJudgeNote, 
   LiveScoreSnapshot, 
   LiveSessionFinalizationResult,
-  LiveCameraSource
+  LiveCameraSource,
+  LivePresenterTrackingMetrics
 } from '../../types/liveJury';
 import { api } from '../../services/api';
+import { PresenterVisionTracker } from '../../utils/presenterVisionTracker';
 import { LiveEvidenceDrawer } from './LiveEvidenceDrawer';
 import { LiveFinalizationModal } from './LiveFinalizationModal';
 
@@ -57,7 +62,7 @@ export const LiveCameraRoom: React.FC<LiveCameraRoomProps> = ({
   const [isVideoOff, setIsVideoOff] = useState<boolean>(false);
 
   // Time tracking
-  const [elapsedSeconds, setElapsedSeconds] = useState<number>(240); // 04:00
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const [isPaused, setIsPaused] = useState<boolean>(false);
 
   // Live Streams
@@ -82,37 +87,22 @@ export const LiveCameraRoom: React.FC<LiveCameraRoomProps> = ({
   // References
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const canvasElemRef = useRef<HTMLCanvasElement>(null);
+  const videoElemRef = useRef<HTMLVideoElement>(null);
+  const trackerRef = useRef<PresenterVisionTracker | null>(null);
 
-  // Initialize Session
-  useEffect(() => {
-    async function init() {
-      try {
-        const startRes = await api.startLiveSession(evaluationId, cameraSource);
-        if (startRes?.session) {
-          setSession(startRes.session);
-          setElapsedSeconds(startRes.session.durationSeconds || 240);
-        }
-        refreshData();
-      } catch (err) {
-        console.error('Failed to init live jury session:', err);
-      }
-    }
-    init();
-  }, [evaluationId, cameraSource]);
+  // Presenter Tracking State
+  const [presenterMetrics, setPresenterMetrics] = useState<LivePresenterTrackingMetrics | null>(null);
+  const [activeMediaSource, setActiveMediaSource] = useState<'WEBCAM' | 'SCREEN' | 'TEST_BENCH'>(() => {
+    if (cameraSource === 'WEBCAM') return 'WEBCAM';
+    if (cameraSource === 'SCREEN') return 'SCREEN';
+    return 'TEST_BENCH'; // SIMULATED and other sources use the simulated test bench
+  });
+  const [usingRealCamera, setUsingRealCamera] = useState<boolean>(false);
 
   // Periodic Refresh
-  const refreshData = async () => {
+  const refreshData = useCallback(async () => {
     try {
-      const [
-        sess,
-        snap,
-        trans,
-        obs,
-        clms,
-        demos,
-        quests,
-        evs
-      ] = await Promise.all([
+      const results = await Promise.allSettled([
         api.getLiveSession(evaluationId),
         api.getLiveScoreSnapshot(evaluationId),
         api.getLiveTranscript(evaluationId),
@@ -122,6 +112,18 @@ export const LiveCameraRoom: React.FC<LiveCameraRoomProps> = ({
         api.getLiveQuestions(evaluationId),
         api.getLiveEvents(evaluationId)
       ]);
+
+      const getValue = <T,>(r: PromiseSettledResult<T>): T | null =>
+        r.status === 'fulfilled' ? r.value : null;
+
+      const sess = getValue(results[0]);
+      const snap = getValue(results[1]);
+      const trans = getValue(results[2]);
+      const obs = getValue(results[3]);
+      const clms = getValue(results[4]);
+      const demos = getValue(results[5]);
+      const quests = getValue(results[6]);
+      const evs = getValue(results[7]);
 
       if (sess) setSession(sess);
       if (snap) setSnapshot(snap);
@@ -134,12 +136,35 @@ export const LiveCameraRoom: React.FC<LiveCameraRoomProps> = ({
     } catch (err) {
       console.error('Failed polling live room data:', err);
     }
-  };
+  }, [evaluationId]);
+
+  // Initialize Session
+  useEffect(() => {
+    async function init() {
+      try {
+        const startRes: any = await api.startLiveSession(evaluationId, cameraSource);
+        const activeSession = startRes?.session || startRes;
+        if (activeSession) {
+          setSession(activeSession);
+          setElapsedSeconds(activeSession.durationSeconds || 0);
+        }
+        if (startRes?.snapshot) {
+          setSnapshot(startRes.snapshot);
+        }
+        refreshData();
+      } catch (err) {
+        console.error('Failed to init live jury session:', err);
+        // Still attempt to load existing session data even if start fails
+        refreshData();
+      }
+    }
+    init();
+  }, [evaluationId, cameraSource, refreshData]);
 
   useEffect(() => {
     const interval = setInterval(refreshData, 3000);
     return () => clearInterval(interval);
-  }, [evaluationId]);
+  }, [refreshData]);
 
   // Session clock
   useEffect(() => {
@@ -155,87 +180,106 @@ export const LiveCameraRoom: React.FC<LiveCameraRoomProps> = ({
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [transcriptSegments]);
 
-  // Edge-AI Video Canvas Simulation Animation
+  // Live Presenter Vision & WebRTC Camera Tracking
   useEffect(() => {
+    const video = videoElemRef.current;
     const canvas = canvasElemRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
 
-    let frameId: number;
-    let angle = 0;
+    const tracker = new PresenterVisionTracker({
+      targetFps: 30,
+      onMetricsUpdate: (metrics) => {
+        setPresenterMetrics(metrics);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
 
-    const render = () => {
-      ctx.fillStyle = '#090d16';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Render video background if active
+        if (video && video.readyState >= 2 && !video.paused && !video.ended && !isVideoOff) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        } else {
+          // High-tech presentation stage background
+          ctx.fillStyle = '#080c16';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Draw simulated road perspective
-      ctx.strokeStyle = '#1e293b';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(canvas.width * 0.45, canvas.height * 0.35);
-      ctx.lineTo(canvas.width * 0.1, canvas.height);
-      ctx.moveTo(canvas.width * 0.55, canvas.height * 0.35);
-      ctx.lineTo(canvas.width * 0.9, canvas.height);
-      ctx.stroke();
+          // Grid
+          ctx.strokeStyle = '#06b6d418';
+          ctx.lineWidth = 1;
+          for (let x = 0; x < canvas.width; x += 40) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height);
+            ctx.stroke();
+          }
+          for (let y = 0; y < canvas.height; y += 40) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.stroke();
+          }
 
-      // Road dash line
-      ctx.setLineDash([12, 16]);
-      ctx.strokeStyle = '#38bdf840';
-      ctx.beginPath();
-      ctx.moveTo(canvas.width * 0.5, canvas.height * 0.35);
-      ctx.lineTo(canvas.width * 0.5, canvas.height);
-      ctx.stroke();
-      ctx.setLineDash([]);
+          // Central Presenter Wireframe Silhouette
+          const cx = canvas.width / 2;
+          const cy = canvas.height * 0.45;
+          ctx.strokeStyle = '#06b6d430';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 65, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.ellipse(cx, cy + 120, 110, 60, 0, Math.PI, Math.PI * 2);
+          ctx.stroke();
 
-      // Pothole Detection Bounding Box
-      const boxX = canvas.width * 0.38 + Math.sin(angle) * 10;
-      const boxY = canvas.height * 0.62;
-      const boxW = 110;
-      const boxH = 65;
+          // Stage Title
+          ctx.fillStyle = '#06b6d450';
+          ctx.font = 'bold 16px monospace';
+          ctx.fillText('LIVE PRESENTATION STAGE // COMPUTER VISION ACTIVE', 32, canvas.height - 32);
+        }
 
-      ctx.strokeStyle = '#06b6d4';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(boxX, boxY, boxW, boxH);
+        // Render High-Tech HUD (Face target, Gaze vector, Posture, Slide indicator)
+        tracker.renderHUD(canvas, metrics);
+      }
+    });
 
-      // Corner tags
-      ctx.fillStyle = '#06b6d4';
-      ctx.fillRect(boxX - 2, boxY - 2, 8, 4);
-      ctx.fillRect(boxX - 2, boxY - 2, 4, 8);
-      ctx.fillRect(boxX + boxW - 6, boxY - 2, 8, 4);
-      ctx.fillRect(boxX + boxW - 2, boxY - 2, 4, 8);
+    trackerRef.current = tracker;
 
-      // Label
-      ctx.fillStyle = '#06b6d4ee';
-      ctx.fillRect(boxX, boxY - 20, 110, 18);
-      ctx.fillStyle = '#0f172a';
-      ctx.font = 'bold 10px monospace';
-      ctx.fillText('POTHOLE_01 96.4%', boxX + 4, boxY - 7);
+    if (activeMediaSource === 'WEBCAM' && video && !isVideoOff) {
+      tracker.startWebcam(video).then(success => setUsingRealCamera(success));
+    } else if (activeMediaSource === 'SCREEN' && video && !isVideoOff) {
+      tracker.startScreenShare(video).then(success => setUsingRealCamera(success));
+    } else if (activeMediaSource === 'TEST_BENCH') {
+      // Start simulated presenter feed — no real camera needed
+      // The tracker's processFrame() will use generateSimulatedPresenterFrame() 
+      // when no live video is available
+      tracker.startWebcam(document.createElement('video')).then(() => {
+        setUsingRealCamera(false);
+      });
+    } else {
+      tracker.stop();
+      queueMicrotask(() => setUsingRealCamera(false));
+    }
 
-      // Telemetry HUD
-      ctx.fillStyle = '#0f172ae0';
-      ctx.fillRect(16, 16, 170, 72);
-      ctx.strokeStyle = '#0ea5e940';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(16, 16, 170, 72);
-
-      ctx.fillStyle = '#38bdf8';
-      ctx.font = 'bold 11px monospace';
-      ctx.fillText('JETSON ORIN NANO', 24, 32);
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '10px monospace';
-      ctx.fillText('INFERENCE: 23.4 ms', 24, 48);
-      ctx.fillText('THROUGHPUT: 42.6 FPS', 24, 62);
-      ctx.fillText('TENSORRT FP16: OK', 24, 76);
-
-      angle += 0.02;
-      frameId = requestAnimationFrame(render);
+    return () => {
+      tracker.stop();
     };
+  }, [activeMediaSource, isVideoOff]);
 
-    render();
+  // Periodic Telemetry Dispatch to Backend (Every 3 seconds)
+  useEffect(() => {
+    if (!presenterMetrics || isPaused) return;
 
-    return () => cancelAnimationFrame(frameId);
-  }, []);
+    const timer = setInterval(async () => {
+      try {
+        const res = await api.sendLiveVisualTelemetry(evaluationId, presenterMetrics, elapsedSeconds);
+        if (res?.snapshot) {
+          setSnapshot(res.snapshot);
+        }
+      } catch (err) {
+        console.warn('Telemetry dispatch error:', err);
+      }
+    }, 3000);
+
+    return () => clearInterval(timer);
+  }, [presenterMetrics, elapsedSeconds, isPaused, evaluationId]);
 
   // Format Timer
   const formatTimer = (totalSec: number) => {
@@ -404,7 +448,15 @@ export const LiveCameraRoom: React.FC<LiveCameraRoomProps> = ({
         <div className="lg:col-span-8 flex flex-col bg-slate-950 p-4 border-r border-slate-800/80 overflow-hidden">
           {/* Video Container */}
           <div className="relative flex-1 bg-black rounded-2xl border border-slate-800/80 overflow-hidden shadow-2xl flex items-center justify-center">
-            {/* Edge AI Simulated or Actual Video */}
+            {/* Hidden Video element for WebRTC camera stream */}
+            <video
+              ref={videoElemRef}
+              muted
+              playsInline
+              className="hidden"
+            />
+
+            {/* Edge AI / WebRTC Computer Vision Canvas */}
             <canvas 
               ref={canvasElemRef} 
               width={1280} 
@@ -430,32 +482,78 @@ export const LiveCameraRoom: React.FC<LiveCameraRoomProps> = ({
               </div>
             )}
 
-            {/* Layout Toggle Overlay */}
-            <div className="absolute bottom-4 right-4 flex items-center gap-1.5 bg-slate-900/80 backdrop-blur-sm p-1 rounded-lg border border-slate-800">
-              <button
-                onClick={() => setLayoutMode('CAMERA')}
-                className={`px-2 py-1 text-[11px] rounded font-medium ${
-                  layoutMode === 'CAMERA' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Camera
-              </button>
-              <button
-                onClick={() => setLayoutMode('SCREEN')}
-                className={`px-2 py-1 text-[11px] rounded font-medium ${
-                  layoutMode === 'SCREEN' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                HUD Feed
-              </button>
-              <button
-                onClick={() => setLayoutMode('SPLIT')}
-                className={`px-2 py-1 text-[11px] rounded font-medium ${
-                  layoutMode === 'SPLIT' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                PiP Telemetry
-              </button>
+            {/* Media Source & Layout Toggle Overlay */}
+            <div className="absolute bottom-4 left-4 right-4 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+              {/* Media Stream Selector */}
+              <div className="flex items-center gap-1.5 bg-slate-900/90 backdrop-blur-md p-1 rounded-xl border border-slate-700 pointer-events-auto">
+                <button
+                  onClick={() => setActiveMediaSource('WEBCAM')}
+                  className={`px-2.5 py-1 text-xs rounded-lg font-mono flex items-center gap-1.5 transition ${
+                    activeMediaSource === 'WEBCAM'
+                      ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/30'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Connect Real-Time WebRTC Webcam"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>Webcam</span>
+                  {usingRealCamera && activeMediaSource === 'WEBCAM' && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveMediaSource('SCREEN')}
+                  className={`px-2.5 py-1 text-xs rounded-lg font-mono flex items-center gap-1.5 transition ${
+                    activeMediaSource === 'SCREEN'
+                      ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/30'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Share Presentation Slides via WebRTC"
+                >
+                  <Monitor className="w-3.5 h-3.5" />
+                  <span>Slides</span>
+                </button>
+                <button
+                  onClick={() => setActiveMediaSource('TEST_BENCH')}
+                  className={`px-2.5 py-1 text-xs rounded-lg font-mono flex items-center gap-1.5 transition ${
+                    activeMediaSource === 'TEST_BENCH'
+                      ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/30'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Hardware Test Bench Simulation"
+                >
+                  <Tv className="w-3.5 h-3.5" />
+                  <span>Lab Bench</span>
+                </button>
+              </div>
+
+              {/* Layout Mode Toggles */}
+              <div className="flex items-center gap-1.5 bg-slate-900/90 backdrop-blur-md p-1 rounded-xl border border-slate-700 pointer-events-auto">
+                <button
+                  onClick={() => setLayoutMode('CAMERA')}
+                  className={`px-2 py-1 text-[11px] rounded-lg font-medium transition ${
+                    layoutMode === 'CAMERA' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Camera
+                </button>
+                <button
+                  onClick={() => setLayoutMode('SCREEN')}
+                  className={`px-2 py-1 text-[11px] rounded-lg font-medium transition ${
+                    layoutMode === 'SCREEN' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  HUD Feed
+                </button>
+                <button
+                  onClick={() => setLayoutMode('SPLIT')}
+                  className={`px-2 py-1 text-[11px] rounded-lg font-medium transition ${
+                    layoutMode === 'SPLIT' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  PiP Telemetry
+                </button>
+              </div>
             </div>
           </div>
 

@@ -8,14 +8,16 @@ import {
   Scale, 
   BookOpen 
 } from 'lucide-react';
-import { VERDICT_THRESHOLDS } from '../../data/mockAiJuryScoring';
+import { VERDICT_THRESHOLDS, type VerdictThreshold } from '../../config/rubricConstants';
 
 interface MethodologyPanelProps {
   isInitiallyExpanded?: boolean;
+  thresholds?: VerdictThreshold[];
 }
 
 export const MethodologyPanel: React.FC<MethodologyPanelProps> = ({
-  isInitiallyExpanded = false
+  isInitiallyExpanded = false,
+  thresholds = VERDICT_THRESHOLDS,
 }) => {
   const [isExpanded, setIsExpanded] = useState(isInitiallyExpanded);
 
@@ -105,7 +107,7 @@ export const MethodologyPanel: React.FC<MethodologyPanelProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {VERDICT_THRESHOLDS.map((tier) => (
+                  {thresholds.map((tier) => (
                     <tr key={tier.level} className="hover:bg-white/[0.02] transition-colors">
                       <td className="py-2.5 px-3">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded border text-[10px] font-bold ${tier.badgeBg} ${tier.badgeBorder} ${tier.textColor}`}>

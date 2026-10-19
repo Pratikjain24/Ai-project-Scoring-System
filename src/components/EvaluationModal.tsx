@@ -23,9 +23,12 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({ isOpen, onClos
 
   useEffect(() => {
     if (!isOpen) {
-      setStage('input');
-      setProgress(0);
-      setConsoleLogs([]);
+      const timer = setTimeout(() => {
+        setStage('input');
+        setProgress(0);
+        setConsoleLogs([]);
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [isOpen]);
 

@@ -12,10 +12,16 @@ import {
 } from 'lucide-react';
 import { SAMPLE_DOSSIER } from '../data/mockData';
 
-export const SampleScorecard: React.FC = () => {
-  const [selectedRubricId, setSelectedRubricId] = useState<string>(SAMPLE_DOSSIER.rubric[0].id);
+export interface SampleScorecardProps {
+  data?: typeof SAMPLE_DOSSIER;
+}
 
-  const selectedCategory = SAMPLE_DOSSIER.rubric.find(r => r.id === selectedRubricId) || SAMPLE_DOSSIER.rubric[0];
+export const SampleScorecard: React.FC<SampleScorecardProps> = ({
+  data = SAMPLE_DOSSIER,
+}) => {
+  const [selectedRubricId, setSelectedRubricId] = useState<string>(data.rubric[0].id);
+
+  const selectedCategory = data.rubric.find(r => r.id === selectedRubricId) || data.rubric[0];
 
   const getCitationIcon = (type: string) => {
     switch (type) {
@@ -52,16 +58,16 @@ export const SampleScorecard: React.FC = () => {
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2.5">
                   <span className="px-2.5 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 font-mono text-xs font-semibold">
-                    {SAMPLE_DOSSIER.cohort}
+                    {data.cohort}
                   </span>
                   <span className="text-slate-500 text-xs">•</span>
-                  <span className="text-xs font-mono text-slate-400">{SAMPLE_DOSSIER.classification}</span>
+                  <span className="text-xs font-mono text-slate-400">{data.classification}</span>
                 </div>
                 <h3 className="text-2xl sm:text-3xl font-display font-bold text-white">
-                  {SAMPLE_DOSSIER.projectTitle}
+                  {data.projectTitle}
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-400 font-mono">
-                  Author: <span className="text-slate-200">{SAMPLE_DOSSIER.author}</span>
+                  Author: <span className="text-slate-200">{data.author}</span>
                 </p>
               </div>
 
@@ -72,11 +78,11 @@ export const SampleScorecard: React.FC = () => {
                     Composite Verdict
                   </span>
                   <div className="text-3xl sm:text-4xl font-extrabold font-mono text-gradient-emerald">
-                    {SAMPLE_DOSSIER.compositeScore}
+                    {data.compositeScore}
                     <span className="text-base text-slate-400 font-normal"> / 100</span>
                   </div>
                   <span className="text-[11px] font-mono text-emerald-400 font-bold">
-                    {SAMPLE_DOSSIER.verdictRank}
+                    {data.verdictRank}
                   </span>
                 </div>
 
@@ -91,7 +97,7 @@ export const SampleScorecard: React.FC = () => {
               <Sparkles className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
               <div>
                 <span className="font-bold text-white font-mono block mb-0.5">EXECUTIVE JURY SUMMARY</span>
-                {SAMPLE_DOSSIER.summaryVerdict}
+                {data.summaryVerdict}
               </div>
             </div>
           </div>
@@ -104,7 +110,7 @@ export const SampleScorecard: React.FC = () => {
                 Weighted Rubric Categories (Click to Inspect)
               </h4>
 
-              {SAMPLE_DOSSIER.rubric.map((item) => {
+              {data.rubric.map((item) => {
                 const isSelected = item.id === selectedRubricId;
                 return (
                   <button
@@ -206,7 +212,7 @@ export const SampleScorecard: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                  {SAMPLE_DOSSIER.actionableRoadmap.map((item, idx) => (
+                  {data.actionableRoadmap.map((item, idx) => (
                     <div
                       key={idx}
                       className="p-2.5 rounded-lg bg-black/40 border border-white/[0.06] flex items-center justify-between text-xs gap-3"
@@ -241,7 +247,7 @@ export const SampleScorecard: React.FC = () => {
               Autonomous Juror Adversarial Dissent Notes
             </span>
             <div className="space-y-1.5 text-[11px] font-mono text-slate-300">
-              {SAMPLE_DOSSIER.juryDissentNotes.map((note, i) => (
+              {data.juryDissentNotes.map((note, i) => (
                 <div key={i} className="flex items-start gap-2">
                   <span className="text-amber-400">⚠</span>
                   <span>{note}</span>

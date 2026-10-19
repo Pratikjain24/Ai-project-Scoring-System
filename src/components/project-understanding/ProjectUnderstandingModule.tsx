@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Cpu, ArrowRight } from 'lucide-react';
 import { MOCK_PROJECT_DNA } from '../../data/mockProjectDNA';
 import type { DNACategory } from '../../types/projectUnderstanding';
@@ -7,22 +7,62 @@ import { ProjectSummaryCard } from './ProjectSummaryCard';
 import { AIConfidenceGauge } from './AIConfidenceGauge';
 import { KnowledgeGraphHUD } from './KnowledgeGraphHUD';
 import { DNACardGrid } from './DNACardGrid';
+import { api } from '../../services/api';
 
-interface ProjectUnderstandingModuleProps {
+export interface ProjectUnderstandingModuleProps {
+  evaluationId?: string;
+  projectId?: string;
   onBackToOverview: () => void;
   onViewEvaluation?: () => void;
   onViewTechnicalAudit?: () => void;
+  projectDNA?: any;
+  initialDNA?: any;
 }
 
 export const ProjectUnderstandingModule: React.FC<ProjectUnderstandingModuleProps> = ({
+  evaluationId,
+  projectId,
   onBackToOverview,
   onViewTechnicalAudit,
+  projectDNA,
+  initialDNA,
 }) => {
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('aeropulse-px4');
+  const initialProjectId = projectId || (evaluationId?.replace(/^eval_/, '')) || 'aeropulse-px4';
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(
+    MOCK_PROJECT_DNA[initialProjectId] ? initialProjectId : 'aeropulse-px4'
+  );
   const [selectedCategory, setSelectedCategory] = useState<DNACategory | null>(null);
   const [manifestModalOpen, setManifestModalOpen] = useState<boolean>(false);
+  const [liveDNA, setLiveDNA] = useState<any>(initialDNA || projectDNA || null);
 
-  const activeProject = MOCK_PROJECT_DNA[selectedProjectId] || MOCK_PROJECT_DNA['aeropulse-px4'];
+  useEffect(() => {
+    if (!evaluationId) return;
+    let isMounted = true;
+    api.getProjectDNA(evaluationId)
+      .then((dna) => {
+        if (dna && isMounted) {
+          setLiveDNA(dna);
+        }
+      })
+      .catch(() => {});
+    return () => { isMounted = false; };
+  }, [evaluationId]);
+
+  const baseProject = initialDNA || projectDNA || MOCK_PROJECT_DNA[selectedProjectId] || MOCK_PROJECT_DNA['aeropulse-px4'];
+  const activeDNA = liveDNA || projectDNA || initialDNA;
+  const activeProject = activeDNA ? {
+    ...baseProject,
+    summary: {
+      ...baseProject.summary,
+      projectName: activeDNA.projectName || baseProject.summary.projectName,
+      tagline: activeDNA.tagline || baseProject.summary.tagline,
+      executiveSummary: activeDNA.executiveSummary || activeDNA.solutionSummary || baseProject.summary.executiveSummary,
+      primaryHypothesis: activeDNA.problemStatement || baseProject.summary.primaryHypothesis,
+      noveltyStatement: activeDNA.noveltyStatement || baseProject.summary.noveltyStatement,
+    },
+    confidence: activeDNA.confidence || baseProject.confidence,
+    dnaItems: activeDNA.dnaItems || baseProject.dnaItems,
+  } : baseProject;
 
   const handleExportJSON = () => {
     // Generate clean downloadable JSON manifest

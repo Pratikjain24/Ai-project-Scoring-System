@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   ArrowLeft, 
   Search, 
@@ -17,7 +17,7 @@ import {
   ShieldAlert,
   Database
 } from 'lucide-react';
-import type { ImpactPillarId } from '../../types/impactFeasibility';
+import type { ImpactPillarId, ImpactFeasibilityReport } from '../../types/impactFeasibility';
 import type { SpecialistEvaluationSummary } from '../../types/specialistEvaluation';
 import { 
   MOCK_SOFTWARE_IMPACT_FEASIBILITY, 
@@ -32,16 +32,24 @@ import { ImpactFeasibilityMatrix2x2 } from './ImpactFeasibilityMatrix2x2';
 import { RiskMatrixAndRecommendations } from './RiskMatrixAndRecommendations';
 import { api } from '../../services/api';
 
-interface ImpactFeasibilityModuleProps {
+export interface ImpactFeasibilityModuleProps {
   evaluationId?: string;
   onBackToOverview?: () => void;
   defaultProjectType?: 'software' | 'hardware';
+  initialReport?: ImpactFeasibilityReport;
+  softwareReport?: ImpactFeasibilityReport;
+  hardwareReport?: ImpactFeasibilityReport;
+  initialSummary?: SpecialistEvaluationSummary;
 }
 
 export const ImpactFeasibilityModule: React.FC<ImpactFeasibilityModuleProps> = ({
   evaluationId = 'eval_smart-road-vision',
   onBackToOverview,
   defaultProjectType = 'software',
+  initialReport,
+  softwareReport,
+  hardwareReport,
+  initialSummary,
 }) => {
   const [selectedTrack, setSelectedTrack] = useState<'software' | 'hardware'>(defaultProjectType);
   const [activeTab, setActiveTab] = useState<ImpactPillarId | 'all' | 'matrix' | 'risks' | 'roadmap' | 'blueprint'>('all');
@@ -70,7 +78,16 @@ export const ImpactFeasibilityModule: React.FC<ImpactFeasibilityModuleProps> = (
   }, [evaluationId]);
 
   useEffect(() => {
-    loadSpecialistData();
+    let isMounted = true;
+    const fetchAsync = async () => {
+      if (isMounted) {
+        await loadSpecialistData();
+      }
+    };
+    fetchAsync();
+    return () => {
+      isMounted = false;
+    };
   }, [loadSpecialistData]);
 
   const handleRunAnalysis = async () => {
@@ -93,16 +110,52 @@ export const ImpactFeasibilityModule: React.FC<ImpactFeasibilityModuleProps> = (
     }
   };
 
-  const report = selectedTrack === 'software' 
-    ? MOCK_SOFTWARE_IMPACT_FEASIBILITY 
-    : MOCK_HARDWARE_IMPACT_FEASIBILITY;
+  const report: ImpactFeasibilityReport = useMemo(() => {
+    const base = selectedTrack === 'software' 
+      ? (softwareReport || initialReport || MOCK_SOFTWARE_IMPACT_FEASIBILITY)
+      : (hardwareReport || initialReport || MOCK_HARDWARE_IMPACT_FEASIBILITY);
+
+    const activeSummary = specialistSummary || initialSummary;
+    if (!activeSummary) return base;
+
+    const compScore = typeof activeSummary.impactScore === 'number' && typeof activeSummary.feasibilityScore === 'number'
+      ? Math.round((activeSummary.impactScore + activeSummary.feasibilityScore) / 2)
+      : base.compositeViabilityScore;
+    const compConf = typeof activeSummary.impactConfidence === 'number' && typeof activeSummary.feasibilityConfidence === 'number'
+      ? Math.round((activeSummary.impactConfidence + activeSummary.feasibilityConfidence) / 2)
+      : base.compositeConfidence;
+
+    return {
+      ...base,
+      compositeViabilityScore: compScore,
+      compositeConfidence: compConf,
+      pillars: {
+        ...base.pillars,
+        social: {
+          ...base.pillars.social,
+          pillarScore: typeof activeSummary.impactScore === 'number' ? activeSummary.impactScore : base.pillars.social.pillarScore,
+        },
+        feasibility: {
+          ...base.pillars.feasibility,
+          pillarScore: typeof activeSummary.feasibilityScore === 'number' ? activeSummary.feasibilityScore : base.pillars.feasibility.pillarScore,
+        }
+      }
+    };
+  }, [selectedTrack, softwareReport, hardwareReport, initialReport, specialistSummary, initialSummary]);
 
   const handleExportReport = () => {
     setExportNotice(`Exporting Comprehensive Impact & Feasibility Dossier (${report.projectName})...`);
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(report, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `${report.projectName.toLowerCase().replace(/\s+/g, '_')}_impact_feasibility_dossier.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
     setTimeout(() => {
-      setExportNotice(`✓ Impact & Feasibility Dossier downloaded: ${report.projectName}_Viability_Audit.pdf`);
+      setExportNotice(`✓ Impact & Feasibility Dossier downloaded: ${report.projectName}_Viability_Audit.json`);
       setTimeout(() => setExportNotice(null), 4000);
-    }, 1200);
+    }, 600);
   };
 
   const navTabs: Array<{
@@ -118,7 +171,7 @@ export const ImpactFeasibilityModule: React.FC<ImpactFeasibilityModuleProps> = (
     { id: 'economic', label: 'Economic Impact', icon: DollarSign, badge: `${report.pillars.economic.pillarScore}` },
     { id: 'environmental', label: 'Environmental', icon: Leaf, badge: `${report.pillars.environmental.pillarScore}` },
     { id: 'feasibility', label: 'Feasibility & TRL', icon: Wrench, badge: `${specialistSummary?.feasibilityScore || report.pillars.feasibility.pillarScore}` },
-    { id: 'roadmap', label: 'Maturity Roadmap', icon: GitBranch, badge: specialistSummary?.maturity?.overallStage || report.roadmap[0].trlLevel },
+    { id: 'roadmap', label: 'Maturity Roadmap', icon: GitBranch, badge: specialistSummary?.maturity?.overallStage || report.roadmap?.[0]?.trlLevel || 'TRL-6' },
     { id: 'blueprint', label: 'Real-World Blueprint', icon: Rocket },
   ];
 

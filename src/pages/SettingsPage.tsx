@@ -14,20 +14,89 @@ import { useTheme } from '../context/ThemeContext';
 export const SettingsPage: React.FC = () => {
   const { theme, setTheme } = useTheme();
 
-  const [preset, setPreset] = useState<'academic' | 'vc' | 'hackathon'>('academic');
-  const [model, setModel] = useState('gemini-1.5-pro');
-  const [confidenceThreshold, setConfidenceThreshold] = useState(70);
-  const [enablePriorArtCrawler, setEnablePriorArtCrawler] = useState(true);
-  const [enableAcousticPitch, setEnableAcousticPitch] = useState(true);
+  const STORAGE_KEY = 'xray_system_settings';
+
+  const [preset, setPreset] = useState<'academic' | 'vc' | 'hackathon'>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved).preset || 'academic' : 'academic';
+    } catch {
+      return 'academic';
+    }
+  });
+
+  const [model, setModel] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved).model || 'gemini-1.5-pro' : 'gemini-1.5-pro';
+    } catch {
+      return 'gemini-1.5-pro';
+    }
+  });
+
+  const [confidenceThreshold, setConfidenceThreshold] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved).confidenceThreshold || 70 : 70;
+    } catch {
+      return 70;
+    }
+  });
+
+  const [enablePriorArtCrawler, setEnablePriorArtCrawler] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved).enablePriorArtCrawler ?? true : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const [enableAcousticPitch, setEnableAcousticPitch] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved).enableAcousticPitch ?? true : true;
+    } catch {
+      return true;
+    }
+  });
+
   const [savedSuccess, setSavedSuccess] = useState(false);
 
-  const [apiKeys, setApiKeys] = useState({
-    github: 'ghp_••••••••••••••••••••••••••••••••••••',
-    semanticScholar: 'sec_••••••••••••••••••••••••••••••••',
-    uspto: 'pat_••••••••••••••••••••••••••••••••',
+  const [apiKeys, setApiKeys] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved).apiKeys || {
+        github: 'ghp_••••••••••••••••••••••••••••••••••••',
+        semanticScholar: 'sec_••••••••••••••••••••••••••••••••',
+        uspto: 'pat_••••••••••••••••••••••••••••••••',
+      } : {
+        github: 'ghp_••••••••••••••••••••••••••••••••••••',
+        semanticScholar: 'sec_••••••••••••••••••••••••••••••••',
+        uspto: 'pat_••••••••••••••••••••••••••••••••',
+      };
+    } catch {
+      return {
+        github: 'ghp_••••••••••••••••••••••••••••••••••••',
+        semanticScholar: 'sec_••••••••••••••••••••••••••••••••',
+        uspto: 'pat_••••••••••••••••••••••••••••••••',
+      };
+    }
   });
 
   const handleSave = () => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        preset,
+        model,
+        confidenceThreshold,
+        enablePriorArtCrawler,
+        enableAcousticPitch,
+        apiKeys,
+      }));
+    } catch (e) {
+      console.warn('Could not save settings to localStorage:', e);
+    }
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3000);
   };

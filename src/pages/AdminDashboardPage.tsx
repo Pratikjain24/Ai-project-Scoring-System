@@ -10,7 +10,12 @@ import {
   FileCheck2,
   CheckCircle2,
   Sliders,
-  Cpu
+  Cpu,
+  Download,
+  Trash2,
+  Edit3,
+  Save,
+  RotateCcw
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -22,6 +27,17 @@ import type {
   FeatureFlagRecord 
 } from '../types/integration';
 
+const DEFAULT_RUBRIC_WEIGHTS = [
+  { key: 'problem', label: '1. Problem Need & Clarity', weight: 10 },
+  { key: 'technical', label: '2. Technical Quality & Architecture', weight: 20 },
+  { key: 'originality', label: '3. Innovation & Originality', weight: 15 },
+  { key: 'impact', label: '4. Real-World Social Impact', weight: 15 },
+  { key: 'presentation', label: '5. Presentation Quality', weight: 10 },
+  { key: 'demo', label: '6. Demonstration & Prototype', weight: 10 },
+  { key: 'feasibility', label: '7. Feasibility & Cost', weight: 10 },
+  { key: 'potential', label: '8. Future Potential & V2X Roadmap', weight: 10 },
+];
+
 export const AdminDashboardPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'health' | 'usage' | 'flags' | 'audit' | 'rubric'>('health');
   const [health, setHealth] = useState<SystemHealthMetrics | null>(null);
@@ -31,6 +47,61 @@ export const AdminDashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [togglingKey, setTogglingKey] = useState<string | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
+  const [isPurgingCache, setIsPurgingCache] = useState(false);
+  const [isEditingRubric, setIsEditingRubric] = useState(false);
+  const [rubricWeights, setRubricWeights] = useState(() => {
+    try {
+      const saved = localStorage.getItem('xray_consensus_rubric_weights');
+      return saved ? JSON.parse(saved) : DEFAULT_RUBRIC_WEIGHTS;
+    } catch {
+      return DEFAULT_RUBRIC_WEIGHTS;
+    }
+  });
+
+  const handlePurgeCache = async () => {
+    setIsPurgingCache(true);
+    try {
+      // Clear relevant client-side cached data
+      sessionStorage.clear();
+      setNotification('System application cache purged successfully. AI router endpoints refreshed.');
+      setTimeout(() => setNotification(null), 4000);
+      await loadData();
+    } finally {
+      setIsPurgingCache(false);
+    }
+  };
+
+  const handleExportAuditLogs = () => {
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(auditLogs, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `system_audit_trail_${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+    setNotification('Audit log exported successfully.');
+    setTimeout(() => setNotification(null), 3000);
+  };
+
+  const handleSaveRubricWeights = () => {
+    const total = rubricWeights.reduce((acc: number, item: any) => acc + (Number(item.weight) || 0), 0);
+    if (total !== 100) {
+      alert(`Weights must sum to 100%. Current total is ${total}%.`);
+      return;
+    }
+    localStorage.setItem('xray_consensus_rubric_weights', JSON.stringify(rubricWeights));
+    setIsEditingRubric(false);
+    setNotification('Rubric weights updated and saved to registry.');
+    setTimeout(() => setNotification(null), 3000);
+  };
+
+  const handleResetRubricWeights = () => {
+    setRubricWeights(DEFAULT_RUBRIC_WEIGHTS);
+    localStorage.removeItem('xray_consensus_rubric_weights');
+    setIsEditingRubric(false);
+    setNotification('Rubric weights restored to canonical defaults.');
+    setTimeout(() => setNotification(null), 3000);
+  };
 
   const loadData = async () => {
     try {
@@ -53,9 +124,22 @@ export const AdminDashboardPage: React.FC = () => {
   };
 
   useEffect(() => {
-    loadData();
-    const timer = setInterval(loadData, 10000);
-    return () => clearInterval(timer);
+    let isMounted = true;
+    const fetchAsync = async () => {
+      if (isMounted) {
+        await loadData();
+      }
+    };
+    fetchAsync();
+    const timer = setInterval(() => {
+      if (isMounted) {
+        void loadData();
+      }
+    }, 10000);
+    return () => {
+      isMounted = false;
+      clearInterval(timer);
+    };
   }, []);
 
   const handleToggleFlag = async (key: string, currentEnabled: boolean) => {
@@ -96,6 +180,16 @@ export const AdminDashboardPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handlePurgeCache}
+            disabled={isPurgingCache}
+            className="flex items-center gap-1.5 text-xs text-rose-300 border-rose-900/60 bg-rose-950/30 hover:bg-rose-900/40"
+          >
+            <Trash2 className={`w-3.5 h-3.5 ${isPurgingCache ? 'animate-spin' : ''}`} />
+            Purge Cache
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -394,30 +488,92 @@ export const AdminDashboardPage: React.FC = () => {
       {/* TAB 4: RUBRIC GOVERNANCE */}
       {activeTab === 'rubric' && (
         <Card className="p-6 border-slate-800 bg-slate-900/50 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
             <div>
               <h3 className="text-base font-bold text-white">Canonical Consensus Rubric v1.0</h3>
               <p className="text-xs text-slate-400">
-                Immutable weights & verdict thresholds. Published rubric versions cannot be silently altered.
+                Institutional weight distribution and verdict thresholds across all multi-agent juries.
               </p>
             </div>
-            <span className="text-xs px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
-              PUBLISHED & LOCKED
-            </span>
+            <div className="flex items-center gap-2">
+              {isEditingRubric ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleResetRubricWeights}
+                    className="flex items-center gap-1.5 text-xs text-slate-300 border-slate-700 bg-slate-800"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Reset
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleSaveRubricWeights}
+                    className="flex items-center gap-1.5 text-xs bg-cyan-600 hover:bg-cyan-500 text-white"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    Save Weights
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsEditingRubric(true)}
+                    className="flex items-center gap-1.5 text-xs text-cyan-300 border-cyan-800/60 bg-cyan-950/30 hover:bg-cyan-900/40"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    Adjust Weights
+                  </Button>
+                  <span className="text-xs px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
+                    ACTIVE
+                  </span>
+                </>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 rounded-xl bg-slate-800/40 border border-slate-700/60 space-y-2">
-              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Weight Distribution (Sum = 100%)</h4>
-              <ul className="text-xs space-y-1.5 pt-2">
-                <li className="flex justify-between text-slate-300"><span>1. Problem Need & Clarity:</span> <strong className="font-mono text-cyan-400">10%</strong></li>
-                <li className="flex justify-between text-slate-300"><span>2. Technical Quality & Architecture:</span> <strong className="font-mono text-cyan-400">20%</strong></li>
-                <li className="flex justify-between text-slate-300"><span>3. Innovation & Originality:</span> <strong className="font-mono text-cyan-400">15%</strong></li>
-                <li className="flex justify-between text-slate-300"><span>4. Real-World Social Impact:</span> <strong className="font-mono text-cyan-400">15%</strong></li>
-                <li className="flex justify-between text-slate-300"><span>5. Presentation Quality:</span> <strong className="font-mono text-cyan-400">10%</strong></li>
-                <li className="flex justify-between text-slate-300"><span>6. Demonstration & Prototype:</span> <strong className="font-mono text-cyan-400">10%</strong></li>
-                <li className="flex justify-between text-slate-300"><span>7. Feasibility & Cost:</span> <strong className="font-mono text-cyan-400">10%</strong></li>
-                <li className="flex justify-between text-slate-300"><span>8. Future Potential & V2X Roadmap:</span> <strong className="font-mono text-cyan-400">10%</strong></li>
+            <div className="p-4 rounded-xl bg-slate-800/40 border border-slate-700/60 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Weight Distribution</h4>
+                <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${
+                  rubricWeights.reduce((a: number, b: any) => a + (Number(b.weight) || 0), 0) === 100
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                    : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                }`}>
+                  Sum: {rubricWeights.reduce((a: number, b: any) => a + (Number(b.weight) || 0), 0)}% / 100%
+                </span>
+              </div>
+              <ul className="text-xs space-y-2 pt-1">
+                {rubricWeights.map((rw: any, idx: number) => (
+                  <li key={rw.key} className="flex items-center justify-between gap-3 text-slate-300">
+                    <span className="truncate">{rw.label}</span>
+                    {isEditingRubric ? (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={rw.weight}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 0;
+                            setRubricWeights((prev: any[]) =>
+                              prev.map((item, i) => (i === idx ? { ...item, weight: val } : item))
+                            );
+                          }}
+                          className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-right text-xs font-mono text-cyan-400 focus:outline-none focus:border-cyan-500"
+                        />
+                        <span className="text-slate-400">%</span>
+                      </div>
+                    ) : (
+                      <strong className="font-mono text-cyan-400">{rw.weight}%</strong>
+                    )}
+                  </li>
+                ))}
               </ul>
             </div>
 
@@ -438,13 +594,23 @@ export const AdminDashboardPage: React.FC = () => {
       {/* TAB 5: AUDIT LOGS */}
       {activeTab === 'audit' && (
         <Card className="p-6 border-slate-800 bg-slate-900/50 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
             <div>
               <h3 className="text-base font-bold text-white">Cryptographic Audit Trail</h3>
               <p className="text-xs text-slate-400">
                 Immutable event stream of all evaluations, state transitions, evidence submissions, and reviewer finalizations.
               </p>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportAuditLogs}
+              disabled={auditLogs.length === 0}
+              className="flex items-center gap-1.5 text-xs text-slate-300 border-slate-700 bg-slate-800 hover:bg-slate-700"
+            >
+              <Download className="w-3.5 h-3.5 text-cyan-400" />
+              Export Audit Trail ({auditLogs.length})
+            </Button>
           </div>
 
           <div className="overflow-x-auto">

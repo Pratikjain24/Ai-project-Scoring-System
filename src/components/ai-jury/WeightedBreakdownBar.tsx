@@ -1,7 +1,7 @@
 import React from 'react';
 import { Sliders, RotateCcw, Calculator, Layers } from 'lucide-react';
 import type { ScoringDimension, WeightPreset, DimensionId } from '../../types/aiJuryScoring';
-import { WEIGHT_PRESETS } from '../../data/mockAiJuryScoring';
+import { WEIGHT_PRESETS } from '../../config/rubricConstants';
 
 interface WeightedBreakdownBarProps {
   dimensions: ScoringDimension[];
@@ -10,6 +10,7 @@ interface WeightedBreakdownBarProps {
   onApplyPreset: (preset: WeightPreset) => void;
   onResetWeights: () => void;
   calculatedOverallScore: number;
+  presets?: WeightPreset[];
 }
 
 export const WeightedBreakdownBar: React.FC<WeightedBreakdownBarProps> = ({
@@ -18,7 +19,8 @@ export const WeightedBreakdownBar: React.FC<WeightedBreakdownBarProps> = ({
   onUpdateWeight,
   onApplyPreset,
   onResetWeights,
-  calculatedOverallScore
+  calculatedOverallScore,
+  presets = WEIGHT_PRESETS,
 }) => {
   // Segment color mapping for the 8 dimensions
   const colorMap: Record<DimensionId, { bg: string; text: string; hex: string }> = {
@@ -62,7 +64,7 @@ export const WeightedBreakdownBar: React.FC<WeightedBreakdownBarProps> = ({
             <Sliders className="w-3.5 h-3.5 text-cyan-400" />
             <span>Rubric Presets:</span>
           </div>
-          {WEIGHT_PRESETS.map((preset) => (
+          {presets.map((preset) => (
             <button
               key={preset.id}
               onClick={() => onApplyPreset(preset)}

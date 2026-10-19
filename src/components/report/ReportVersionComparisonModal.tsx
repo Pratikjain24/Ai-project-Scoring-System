@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   X, 
   GitCompare, 
@@ -34,22 +34,18 @@ export const ReportVersionComparisonModal: React.FC<ReportVersionComparisonModal
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isOpen) {
-      if (versions.length > 1) {
-        const sorted = [...versions].sort((a, b) => a.version - b.version);
+    if (isOpen && versions.length > 1) {
+      const sorted = [...versions].sort((a, b) => a.version - b.version);
+      const timer = setTimeout(() => {
         setBaseVersion(sorted[0].version);
         setTargetVersion(sorted[sorted.length - 1].version);
-      }
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [isOpen, versions]);
 
-  useEffect(() => {
-    if (isOpen && baseVersion && targetVersion && baseVersion !== targetVersion) {
-      loadDiff();
-    }
-  }, [isOpen, baseVersion, targetVersion]);
-
-  const loadDiff = async () => {
+  const loadDiff = useCallback(async () => {
+    if (!baseVersion || !targetVersion || baseVersion === targetVersion) return;
     setIsLoading(true);
     setErrorMsg(null);
     try {
@@ -60,7 +56,22 @@ export const ReportVersionComparisonModal: React.FC<ReportVersionComparisonModal
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [evaluationId, baseVersion, targetVersion]);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (isOpen && baseVersion && targetVersion && baseVersion !== targetVersion) {
+      const fetchAsync = async () => {
+        if (isMounted) {
+          await loadDiff();
+        }
+      };
+      fetchAsync();
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, baseVersion, targetVersion, loadDiff]);
 
   if (!isOpen) return null;
 

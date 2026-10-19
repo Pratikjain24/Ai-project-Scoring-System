@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
   Download, 
@@ -16,7 +17,8 @@ import {
   Zap, 
   TrendingUp, 
   History, 
-  AlertTriangle 
+  AlertTriangle,
+  Users
 } from 'lucide-react';
 import type { 
   AIJuryScorecard, 
@@ -54,17 +56,23 @@ import { SensitivityAndClaims } from './SensitivityAndClaims';
 import { ExceptionalityPanel } from './ExceptionalityPanel';
 import { GovernanceAndHistory } from './GovernanceAndHistory';
 import { ProjectComparisonModal } from './ProjectComparisonModal';
+import { JuryDebateChamber } from './JuryDebateChamber';
 
-interface AIJuryModuleProps {
+export interface AIJuryModuleProps {
   evaluationId?: string;
   projectId?: string;
   onBackToOverview: () => void;
   onViewDossier?: () => void;
   onViewPresentationDemo?: () => void;
+  initialScorecard?: AIJuryScorecard;
+  initialDecision?: JuryDecisionData;
+  softwareScorecard?: AIJuryScorecard;
+  hardwareScorecard?: AIJuryScorecard;
 }
 
 type JuryTab = 
   | 'overview'
+  | 'debate'
   | 'breakdown'
   | 'audit'
   | 'sandbox'
@@ -78,8 +86,15 @@ export const AIJuryModule: React.FC<AIJuryModuleProps> = ({
   projectId = 'smart-road-vision',
   onBackToOverview,
   onViewDossier,
-  onViewPresentationDemo
+  onViewPresentationDemo,
+  initialScorecard,
+  initialDecision,
+  softwareScorecard,
+  hardwareScorecard,
 }) => {
+  const navigate = useNavigate();
+  const activeProj = projectId || evaluationId?.replace(/^eval_/, '') || 'smart-road-vision';
+
   // Navigation tabs
   const [activeTab, setActiveTab] = useState<JuryTab>('overview');
 
@@ -93,15 +108,19 @@ export const AIJuryModule: React.FC<AIJuryModuleProps> = ({
   const [selectedDimension, setSelectedDimension] = useState<ScoringDimension | null>(null);
   const [selectedDimensionId, setSelectedDimensionId] = useState<string | null>(null);
 
-  // Base scorecard for legacy visualization
+  // Base scorecard for visualization
   const baseScorecard: AIJuryScorecard = useMemo(() => {
-    return activeTrack === 'hardware' ? mockHardwareScorecard : mockSoftwareScorecard;
-  }, [activeTrack]);
+    if (activeTrack === 'hardware') {
+      return hardwareScorecard || initialScorecard || mockHardwareScorecard;
+    }
+    return softwareScorecard || initialScorecard || mockSoftwareScorecard;
+  }, [activeTrack, hardwareScorecard, softwareScorecard, initialScorecard]);
 
   // Dynamic weights dictionary for legacy simulator
   const [customWeights, setCustomWeights] = useState<Record<DimensionId, number>>(() => {
     const initial: Record<string, number> = {};
-    mockHardwareScorecard.dimensions.forEach(d => {
+    const refScorecard = hardwareScorecard || initialScorecard || mockHardwareScorecard;
+    refScorecard.dimensions.forEach(d => {
       initial[d.id] = d.weight;
     });
     return initial as Record<DimensionId, number>;
@@ -112,7 +131,7 @@ export const AIJuryModule: React.FC<AIJuryModuleProps> = ({
 
   // Loading and real decision state
   const [isLoading, setIsLoading] = useState(true);
-  const [decision, setDecision] = useState<JuryDecisionData | null>(null);
+  const [decision, setDecision] = useState<JuryDecisionData | null>(initialDecision || null);
   const [scoreHistory, setScoreHistory] = useState<ScoreHistoryEntry[]>([]);
   const [humanReviews, setHumanReviews] = useState<HumanReview[]>([]);
   const [juryQuestions, setJuryQuestions] = useState<JuryQuestionItem[]>([]);
@@ -656,7 +675,16 @@ export const AIJuryModule: React.FC<AIJuryModuleProps> = ({
   }, [evaluationId, fallbackDecision, fallbackHistory, fallbackReviews]);
 
   useEffect(() => {
-    loadData();
+    let isMounted = true;
+    const fetchAsync = async () => {
+      if (isMounted) {
+        await loadData();
+      }
+    };
+    fetchAsync();
+    return () => {
+      isMounted = false;
+    };
   }, [loadData]);
 
   // Active decision data
@@ -1035,6 +1063,21 @@ export const AIJuryModule: React.FC<AIJuryModuleProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveTab('debate')}
+            className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'debate'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold shadow'
+                : 'text-slate-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5 text-cyan-400" />
+            <span>AI Jury Chamber & Debate</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-500/30">
+              3-Turn Loop
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('breakdown')}
             className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'breakdown'
@@ -1165,8 +1208,8 @@ export const AIJuryModule: React.FC<AIJuryModuleProps> = ({
 
             <HighlightsAndRisks
               scorecard={currentScorecard}
-              onInspectEvidence={(trace) => {
-                alert(`Evidence trace location: ${trace}`);
+              onInspectEvidence={(_trace) => {
+                navigate(`/evaluations/${activeProj}/checklist`);
               }}
               onSelectDimension={handleSelectDimensionFromChart}
             />
@@ -1183,12 +1226,20 @@ export const AIJuryModule: React.FC<AIJuryModuleProps> = ({
           </div>
         )}
 
+        {/* 2. AI JURY CHAMBER & MULTI-TURN DEBATE TAB */}
+        {activeTab === 'debate' && (
+          <JuryDebateChamber
+            evaluationId={evaluationId}
+            projectName={currentScorecard.projectName || 'Smart Road Vision'}
+          />
+        )}
+
         {/* 2. 8-CATEGORY BREAKDOWN TAB */}
         {activeTab === 'breakdown' && (
           <CategoryBreakdownPanel
             categoryScores={currentDecision.categoryScores || []}
-            onSelectEvidence={(evidenceId) => {
-              alert(`Navigating to verified evidence citation: ${evidenceId}`);
+            onSelectEvidence={(_evidenceId) => {
+              navigate(`/evaluations/${activeProj}/documents`);
             }}
           />
         )}

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Award,
   Dna,
@@ -74,6 +75,7 @@ const SECTION_NAV = [
 
 export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
   evaluationId,
+  projectId,
 }) => {
   const [report, setReport] = useState<EvaluationReport | null>(null);
   const [versions, setVersions] = useState<ReportVersionMeta[]>([]);
@@ -87,11 +89,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
   const [selectedEvidenceId, setSelectedEvidenceId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  useEffect(() => {
-    loadReportData();
-  }, [evaluationId, selectedVersion]);
-
-  const loadReportData = async () => {
+  const loadReportData = useCallback(async () => {
     setIsLoading(true);
     try {
       const vers = await api.getReportVersions(evaluationId).catch(() => []);
@@ -114,7 +112,20 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [evaluationId, selectedVersion]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchAsync = async () => {
+      if (isMounted) {
+        await loadReportData();
+      }
+    };
+    fetchAsync();
+    return () => {
+      isMounted = false;
+    };
+  }, [loadReportData]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -157,13 +168,16 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
     }
   };
 
+  const navigate = useNavigate();
+  const proj = projectId || (evaluationId ? evaluationId.replace(/^eval_/, '') : 'smart-road-vision');
+
   const handleInspectEvidence = (evidenceId: string) => {
     setSelectedEvidenceId(evidenceId);
     setShowEvidencePanel(true);
   };
 
-  const handleJumpToTimestamp = (timestamp: string) => {
-    alert(`Seeking demonstrator video to timestamp: ${timestamp}`);
+  const handleJumpToTimestamp = (_timestamp: string) => {
+    navigate(`/evaluations/${proj}/presentation`);
   };
 
   const filteredNav = useMemo(() => {
@@ -219,6 +233,19 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
         onRegenerate={handleRegenerate}
         isGenerating={isGenerating}
       />
+
+      {/* Scenario 9: Partial Generation Resilience Notice */}
+      {r?.generationErrors && r.generationErrors.length > 0 && (
+        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="font-bold font-mono">⚠️ SCHEMA RESILIENCE:</span>
+            <span>{r.generationErrors.length} section(s) recovered with deterministic fallbacks; exactly 20/20 sections guaranteed.</span>
+          </div>
+          <span className="text-[10px] font-mono bg-amber-500/20 px-2 py-0.5 rounded text-amber-200">
+            20/20 SECTIONS PRESERVED
+          </span>
+        </div>
+      )}
 
       {/* 3-Column Layout */}
       <div className="flex flex-col lg:flex-row items-start gap-6 relative">

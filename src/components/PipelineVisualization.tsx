@@ -12,10 +12,16 @@ import {
 } from 'lucide-react';
 import { PIPELINE_STEPS } from '../data/mockData';
 
-export const PipelineVisualization: React.FC = () => {
-  const [activeStepId, setActiveStepId] = useState<string>(PIPELINE_STEPS[0].id);
+export interface PipelineVisualizationProps {
+  steps?: typeof PIPELINE_STEPS;
+}
 
-  const activeStep = PIPELINE_STEPS.find(s => s.id === activeStepId) || PIPELINE_STEPS[0];
+export const PipelineVisualization: React.FC<PipelineVisualizationProps> = ({
+  steps = PIPELINE_STEPS,
+}) => {
+  const [activeStepId, setActiveStepId] = useState<string>(steps[0]?.id || '');
+
+  const activeStep = steps.find(s => s.id === activeStepId) || steps[0];
 
   const getStepIcon = (id: string) => {
     switch (id) {
@@ -50,7 +56,7 @@ export const PipelineVisualization: React.FC = () => {
 
         {/* Pipeline Stepper Buttons */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-10">
-          {PIPELINE_STEPS.map((step) => {
+          {steps.map((step) => {
             const isSelected = step.id === activeStepId;
             return (
               <button

@@ -49,7 +49,37 @@ export type LiveEventType =
   | 'ANSWER_DETECTED'
   | 'ANOMALY_DETECTED'
   | 'SCORE_UPDATED'
-  | 'NOTE_ADDED';
+  | 'NOTE_ADDED'
+  | 'SLIDE_CHANGED'
+  | 'GAZE_WARNING'
+  | 'POSTURE_ALERT'
+  | 'SLIDE_TRANSITION'
+  | 'PRESENTER_CV_TELEMETRY';
+
+export type PresenterGazeStatus = 'DIRECT' | 'LOOKING_DOWN' | 'LOOKING_AWAY';
+export type PresenterPostureStatus = 'UPRIGHT' | 'LEANING_FORWARD' | 'LEANING_BACK' | 'SLUMPED';
+export type GestureActivityLevel = 'LOW' | 'OPTIMAL' | 'EXCESSIVE';
+export type LightingQuality = 'GOOD' | 'TOO_DARK' | 'TOO_BRIGHT';
+
+export interface LivePresenterTrackingMetrics {
+  faceDetected: boolean;
+  faceBoundingBox?: { x: number; y: number; width: number; height: number };
+  gazeStatus: PresenterGazeStatus;
+  eyeContactScore: number; // 0-100%
+  headPose: {
+    yaw: number;   // -90 to +90 (left/right)
+    pitch: number; // -90 to +90 (up/down)
+    roll: number;  // -90 to +90 (tilt)
+  };
+  postureStatus: PresenterPostureStatus;
+  postureStability: number; // 0-100%
+  gestureActivity: GestureActivityLevel;
+  slideNumber: number;
+  slideDwellTimeSeconds: number;
+  slideTransitionDetected: boolean;
+  lightingQuality: LightingQuality;
+  timestampMs: number;
+}
 
 export interface LiveEvent {
   id: string;
@@ -196,6 +226,8 @@ export interface LiveScoreSnapshot {
     demoReliability: number;
     presentationStructure: number;
   };
+  visualMetrics?: LivePresenterTrackingMetrics;
+  visualTelemetryCount?: number;
 }
 
 export interface LiveSessionFinalizationResult {

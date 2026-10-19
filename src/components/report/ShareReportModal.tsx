@@ -32,20 +32,27 @@ export const ShareReportModal: React.FC<ShareReportModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Load existing shares
-  React.useEffect(() => {
-    if (isOpen) {
-      loadExistingShares();
-    }
-  }, [isOpen, evaluationId]);
-
-  const loadExistingShares = async () => {
+  const loadExistingShares = React.useCallback(async () => {
     try {
       const existing = (window as any).__projectXRayShares?.[evaluationId] || [];
       setShares(existing);
     } catch (e) {
       console.error(e);
     }
-  };
+  }, [evaluationId]);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const fetchAsync = async () => {
+      if (isOpen && isMounted) {
+        await loadExistingShares();
+      }
+    };
+    fetchAsync();
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, loadExistingShares]);
 
   if (!isOpen) return null;
 

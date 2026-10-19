@@ -9,7 +9,13 @@ import {
 } from 'lucide-react';
 import { INITIAL_EVIDENCE_STATUS } from '../../data/liveJuryData';
 
-export const EvidenceStatusPanel: React.FC = () => {
+export interface EvidenceStatusPanelProps {
+  evidenceStatus?: typeof INITIAL_EVIDENCE_STATUS;
+}
+
+export const EvidenceStatusPanel: React.FC<EvidenceStatusPanelProps> = ({
+  evidenceStatus = INITIAL_EVIDENCE_STATUS,
+}) => {
   const getIcon = (type: string) => {
     switch (type) {
       case 'Git Commit Forensics': return <GitBranch className="w-4 h-4 text-cyan-400" />;
@@ -29,14 +35,18 @@ export const EvidenceStatusPanel: React.FC = () => {
             Multimodal Ingestion & Evidence Daemons
           </h3>
         </div>
-        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30">
-          DEMO DATA
+        <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+          evidenceStatus === INITIAL_EVIDENCE_STATUS
+            ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+            : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+        }`}>
+          {evidenceStatus === INITIAL_EVIDENCE_STATUS ? 'DEMO DATA' : 'LIVE DAEMONS'}
         </span>
       </div>
 
       {/* Daemons List */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {INITIAL_EVIDENCE_STATUS.map((item) => (
+        {evidenceStatus.map((item) => (
           <div
             key={item.id}
             className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:border-white/15 transition-all text-xs font-mono space-y-2"

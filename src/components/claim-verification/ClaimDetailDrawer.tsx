@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   X,
   ShieldCheck,
@@ -49,16 +49,7 @@ export const ClaimDetailDrawer: React.FC<ClaimDetailDrawerProps> = ({
   const [submittingReview, setSubmittingReview] = useState(false);
   const [reviewSuccess, setReviewSuccess] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (isOpen && claimId) {
-      loadClaimDetail(claimId);
-    } else {
-      setDetail(null);
-      setReviewSuccess(null);
-    }
-  }, [isOpen, claimId, evaluationId]);
-
-  const loadClaimDetail = async (id: string) => {
+  const loadClaimDetail = useCallback(async (id: string) => {
     try {
       setLoading(true);
       const res = await api.getClaimDetail(evaluationId, id);
@@ -73,7 +64,25 @@ export const ClaimDetailDrawer: React.FC<ClaimDetailDrawerProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [evaluationId]);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!isOpen || !claimId) return;
+
+    const fetchAsync = async () => {
+      if (isMounted) {
+        await loadClaimDetail(claimId);
+      }
+    };
+    fetchAsync();
+
+    return () => {
+      isMounted = false;
+      setDetail(null);
+      setReviewSuccess(null);
+    };
+  }, [isOpen, claimId, loadClaimDetail]);
 
   const handleHumanReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

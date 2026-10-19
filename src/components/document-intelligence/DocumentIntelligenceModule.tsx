@@ -545,7 +545,7 @@ export const DocumentIntelligenceModule: React.FC<DocumentIntelligenceModuleProp
               <div className="space-y-1.5 text-[10px] font-mono text-amber-200/90">
                 {evidenceGaps.slice(0, 2).map((gap, i) => (
                   <div key={i} className="p-2 rounded bg-slate-950/60 border border-amber-500/20">
-                    <span className="text-amber-400 font-bold block">[{gap.severity} GAP] {gap.claimText.slice(0, 45)}...</span>
+                    <span className="text-amber-400 font-bold block">[{gap.severity} GAP] {(gap.claimText || (gap as any).claimId || 'Unverified Metric Claim').slice(0, 45)}...</span>
                     <span className="text-slate-400">Missing: {gap.missingElements?.[0] || 'Validation dataset sample count'}</span>
                   </div>
                 ))}

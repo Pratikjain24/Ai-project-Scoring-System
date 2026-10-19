@@ -11,11 +11,13 @@ import { INITIAL_TRANSCRIPT } from '../../data/liveJuryData';
 interface LiveTranscriptPanelProps {
   isVisible: boolean;
   onToggleVisibility: () => void;
+  transcript?: typeof INITIAL_TRANSCRIPT;
 }
 
 export const LiveTranscriptPanel: React.FC<LiveTranscriptPanelProps> = ({
   isVisible,
   onToggleVisibility,
+  transcript = INITIAL_TRANSCRIPT,
 }) => {
   return (
     <div className="rounded-3xl bg-[#090D16] border border-white/10 p-5 shadow-2xl space-y-3">
@@ -26,8 +28,12 @@ export const LiveTranscriptPanel: React.FC<LiveTranscriptPanelProps> = ({
           <h3 className="font-display font-bold text-xs uppercase tracking-wider text-white">
             Live Synchronized Audio Transcript
           </h3>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30">
-            DEMO DATA
+          <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+            transcript === INITIAL_TRANSCRIPT
+              ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+              : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+          }`}>
+            {transcript === INITIAL_TRANSCRIPT ? 'DEMO DATA' : 'LIVE STREAM'}
           </span>
         </div>
 
@@ -43,7 +49,7 @@ export const LiveTranscriptPanel: React.FC<LiveTranscriptPanelProps> = ({
       {/* Transcript Body */}
       {isVisible && (
         <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
-          {INITIAL_TRANSCRIPT.map((entry) => (
+          {transcript.map((entry) => (
             <div
               key={entry.id}
               className={`p-3 rounded-xl border text-xs font-sans space-y-1 ${

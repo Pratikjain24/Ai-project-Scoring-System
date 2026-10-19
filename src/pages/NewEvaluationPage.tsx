@@ -10,7 +10,10 @@ import {
   FileText,
   Cpu,
   Code2,
+  Layers,
+  Activity,
   ShieldCheck,
+  Zap,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -19,21 +22,33 @@ import type { Step } from '../components/ui/StepIndicator';
 import { UploadZone } from '../components/ui/UploadZone';
 import type { UploadedFile } from '../components/ui/UploadZone';
 import { api } from '../services/api';
+import { EvaluationStreamView } from '../components/pipeline/EvaluationStreamView';
 
 export const NewEvaluationPage: React.FC = () => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
 
+  // Streaming State for Fast-Path Demo Mode
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingData, setStreamingData] = useState<{
+    evalId: string;
+    projectId: string;
+    projectName: string;
+    domain: string;
+    architectureType: string;
+  } | null>(null);
+
   // Form State
   const [formData, setFormData] = useState({
     projectName: 'Smart Road Vision',
-    projectType: 'Software' as 'Software' | 'Hardware',
+    projectType: 'Software' as 'Software' | 'Hardware' | 'Hybrid' | 'Biomedical',
     category: 'AI / Computer Vision',
     domain: 'Smart Cities & Municipal Transit Mobility',
     problemStatement: 'Municipalities waste $4.2B annually repairing potholes reactively after vehicular damage or severe accidents have already transpired.',
     projectDescription: 'Edge-deployed computer vision model running on municipal transit fleet cameras to detect, classify, and geo-index asphalt degradation with millimeter precision before structural failure.',
     teamName: 'VisionGrid Labs (MIT / Stanford cohort)',
   });
+
 
   const [files, setFiles] = useState<UploadedFile[]>([
     { id: '1', name: 'SmartRoadVision_Architecture_PitchDeck.pptx', size: '14.2 MB', type: 'ppt', progress: 100 },
@@ -59,10 +74,86 @@ export const NewEvaluationPage: React.FC = () => {
     if (currentStep > 1) setCurrentStep(currentStep - 1);
   };
 
+  const PRESETS = [
+    {
+      id: 'cybershield',
+      name: 'CyberShield Zero-Trust Mesh',
+      type: 'Software' as const,
+      category: 'Cybersecurity / Distributed Systems',
+      domain: 'Cloud Native Infrastructure Defense',
+      problem: 'Traditional perimeter security fails to prevent lateral traversal once an internal container or node is compromised.',
+      solution: 'Linux eBPF resident monitor enforcing identity-authenticated mutual TLS microsegmentation at wire speed with zero context switches.',
+      team: 'ZeroPoint Labs',
+      filePrefix: 'CyberShield_eBPF'
+    },
+    {
+      id: 'bioprint-osteo',
+      name: 'BioPrint OsteoScaffold',
+      type: 'Hardware' as const,
+      category: 'BioTech / 3D Biomaterial Printing',
+      domain: 'Orthopedic Regenerative Implants',
+      problem: 'Severe bone fracture defects exceeding 5cm fail to heal spontaneously and autografts cause secondary donor-site morbidity in 28% of patients.',
+      solution: 'Extrusion 3D bioprinter fabricating hydroxyapatite/polycaprolactone bioresorbable lattices with pore gradients matching trabecular bone.',
+      team: 'OsteoForm Biomechanics',
+      filePrefix: 'BioPrint_Tissue'
+    },
+    {
+      id: 'agrosense',
+      name: 'AgroSense Autonomous Soil Rig',
+      type: 'Hardware' as const,
+      category: 'AgriTech / Embedded IoT',
+      domain: 'Precision Agriculture & Soil Health Telemetry',
+      problem: 'Excess nitrogen fertilizer runoff pollutes groundwater and accounts for 18% of avoidable commercial farm operational expenses.',
+      solution: 'Autonomous solar-powered field probe equipped with ISFET chemical sensors and LoRaWAN long-range mesh radio transmitting root-zone telemetry every 15 minutes.',
+      team: 'TerraLogic Agronomics',
+      filePrefix: 'AgroSense_LoRa'
+    },
+    {
+      id: 'aeropulse-px4',
+      name: 'AeroPulse PX-4 Drone Engine',
+      type: 'Hardware' as const,
+      category: 'Aerospace / Autonomous Robotics',
+      domain: 'Heavy-Lift UAV Hybrid Propulsion',
+      problem: 'Commercial inspection drones lack flight endurance beyond 35 minutes and lack deterministic hardware failover against rotor ESC lockup.',
+      solution: 'Compact multi-fuel turbine generator feeding direct-drive brushless motors controlled via ASIL-D lockstep ARM microcontrollers.',
+      team: 'AeroPulse Flight Technologies',
+      filePrefix: 'AeroPulse_UAV'
+    },
+    {
+      id: 'smart-road-vision',
+      name: 'Smart Road Vision',
+      type: 'Software' as const,
+      category: 'AI / Computer Vision',
+      domain: 'Smart Cities & Municipal Transit Mobility',
+      problem: 'Municipalities waste $4.2B annually repairing potholes reactively after vehicular damage or severe accidents have already transpired.',
+      solution: 'Edge-deployed computer vision model running on municipal transit fleet cameras to detect, classify, and geo-index asphalt degradation with millimeter precision before structural failure.',
+      team: 'VisionGrid Labs (MIT / Stanford cohort)',
+      filePrefix: 'SmartRoadVision'
+    }
+  ];
+
+  const applyPreset = (preset: typeof PRESETS[0]) => {
+    setFormData({
+      projectName: preset.name,
+      projectType: preset.type,
+      category: preset.category,
+      domain: preset.domain,
+      problemStatement: preset.problem,
+      projectDescription: preset.solution,
+      teamName: preset.team,
+    });
+    setFiles([
+      { id: '1', name: `${preset.filePrefix}_Architecture_Specification.pdf`, size: '8.4 MB', type: 'pdf', progress: 100 },
+      { id: '2', name: `${preset.filePrefix}_Source_Repo_Archive.zip`, size: '24.1 MB', type: 'doc', progress: 100 },
+      { id: '3', name: `${preset.filePrefix}_Telemetry_Benchmark.mp4`, size: '36.8 MB', type: 'video', progress: 100 },
+    ]);
+  };
+
   const handleStartEvaluation = async () => {
     setIsEvaluating(true);
     try {
-      const slug = formData.projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'new-project';
+      const baseSlug = formData.projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `new-proj-${Date.now()}`;
+      const slug = baseSlug;
       const createdProj = await api.createProject({
         id: slug,
         name: formData.projectName,
@@ -72,25 +163,78 @@ export const NewEvaluationPage: React.FC = () => {
         problemStatement: formData.problemStatement,
         solutionDescription: formData.projectDescription,
         teamName: formData.teamName,
-      });
+      }).catch(() => ({ id: slug }));
 
       const projectId = createdProj?.id || slug;
       const createdEval = await api.createEvaluation({
         projectId,
         mode: evalMode === 'live-camera' ? 'LIVE_CAMERA' : 'VIDEO_ANALYSIS',
-      });
+      }).catch(() => ({ id: `eval_${projectId}` }));
 
       const evalId = createdEval?.id || `eval_${projectId}`;
-      await api.startEvaluation(evalId);
+      await api.startEvaluation(evalId, { fastMode: true, stageDelayMs: 1400 }).catch(() => {});
 
-      navigate(`/evaluations/${projectId}`);
+      // Switch to real-time animated streaming progress UI
+      setStreamingData({
+        evalId,
+        projectId,
+        projectName: formData.projectName,
+        domain: formData.domain,
+        architectureType: formData.projectType,
+      });
+      setIsStreaming(true);
     } catch (err) {
-      console.warn('[NewEvaluationPage] Backend call failed, navigating with local state fallback:', err);
-      navigate('/evaluations/smart-road-vision');
+      console.warn('[NewEvaluationPage] Starting streaming view with local state:', err);
+      const evalId = `eval_${Date.now()}`;
+      setStreamingData({
+        evalId,
+        projectId: 'smart-road-vision',
+        projectName: formData.projectName,
+        domain: formData.domain,
+        architectureType: formData.projectType,
+      });
+      setIsStreaming(true);
     } finally {
       setIsEvaluating(false);
     }
   };
+
+  if (isStreaming && streamingData) {
+    return (
+      <div className="max-w-6xl mx-auto space-y-6 pb-16">
+        <div className="flex items-center justify-between">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsStreaming(false)}
+            className="text-xs"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+            <span>Return to Form</span>
+          </Button>
+
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => navigate(`/evaluations/${streamingData.projectId}`)}
+            className="text-xs"
+          >
+            <span>Open Evaluation Workspace</span>
+            <ArrowRight className="w-3.5 h-3.5 ml-1" />
+          </Button>
+        </div>
+
+        <EvaluationStreamView
+          evaluationId={streamingData.evalId}
+          projectId={streamingData.projectId}
+          projectName={streamingData.projectName}
+          projectDomain={streamingData.domain}
+          architectureType={streamingData.architectureType}
+          onCompleted={() => {}}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-16">
@@ -106,7 +250,32 @@ export const NewEvaluationPage: React.FC = () => {
         <p className="text-xs sm:text-sm text-slate-400 max-w-lg mx-auto">
           Submit software repos, hardware schematics, pitch decks, and presentation media for autonomous jury scrutiny.
         </p>
+
+        {/* Demo Day Presets Bar */}
+        <div className="pt-2">
+          <div className="text-[11px] font-mono text-slate-400 mb-1.5 flex items-center justify-center gap-1.5">
+            <Zap className="w-3 h-3 text-amber-400" />
+            <span>Demo Day Fast Presets (1-Click Real-Time Scrutiny):</span>
+          </div>
+          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+            {PRESETS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => applyPreset(p)}
+                className={`text-[11px] px-2.5 py-1 rounded-lg border font-mono transition-all ${
+                  formData.projectName === p.name
+                    ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 font-bold'
+                    : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
+                }`}
+              >
+                {p.name.split(' ')[0]}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
+
 
       {/* Step Indicator */}
       <div className="p-4 sm:p-6 rounded-2xl bg-slate-900/60 border border-slate-800">
@@ -150,30 +319,54 @@ export const NewEvaluationPage: React.FC = () => {
                 <label className="block text-xs font-semibold uppercase font-mono tracking-wider text-slate-300 mb-1">
                   Project Architecture Type *
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, projectType: 'Software' })}
-                    className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border transition-all ${
+                    className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-medium border transition-all ${
                       formData.projectType === 'Software'
                         ? 'bg-cyan-950/60 border-cyan-500/50 text-cyan-300'
                         : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
                     }`}
                   >
-                    <Code2 className="w-3.5 h-3.5" />
+                    <Code2 className="w-3.5 h-3.5 shrink-0" />
                     <span>Software</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setFormData({ ...formData, projectType: 'Hardware' })}
-                    className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border transition-all ${
+                    className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-medium border transition-all ${
                       formData.projectType === 'Hardware'
                         ? 'bg-cyan-950/60 border-cyan-500/50 text-cyan-300'
                         : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
                     }`}
                   >
-                    <Cpu className="w-3.5 h-3.5" />
+                    <Cpu className="w-3.5 h-3.5 shrink-0" />
                     <span>Hardware</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, projectType: 'Hybrid' })}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-medium border transition-all ${
+                      formData.projectType === 'Hybrid'
+                        ? 'bg-cyan-950/60 border-cyan-500/50 text-cyan-300'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5 shrink-0" />
+                    <span>Hybrid</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, projectType: 'Biomedical' })}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-xs font-medium border transition-all ${
+                      formData.projectType === 'Biomedical'
+                        ? 'bg-cyan-950/60 border-cyan-500/50 text-cyan-300'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <Activity className="w-3.5 h-3.5 shrink-0" />
+                    <span>Biomedical</span>
                   </button>
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Award, 
   Dna, 
@@ -24,66 +24,100 @@ import {
   Check, 
   Sparkles
 } from 'lucide-react';
-import type { AudiencePreset } from '../../types/masterDossier';
+import type { AudiencePreset, MasterDossierData } from '../../types/masterDossier';
 import { MOCK_HARDWARE_DOSSIER, MOCK_SOFTWARE_DOSSIER } from '../../data/mockMasterDossier';
 import { ReportHeader } from './ReportHeader';
 import { EditorialSectionCard } from './EditorialSectionCard';
+import { api } from '../../services/api';
 
-interface MasterEvaluationDossierProps {
+export interface MasterEvaluationDossierProps {
+  evaluationId?: string;
   onBackToOverview?: () => void;
   defaultProjectType?: 'software' | 'hardware';
+  initialDossier?: Partial<MasterDossierData>;
+  softwareDossier?: MasterDossierData;
+  hardwareDossier?: MasterDossierData;
 }
 
+// The 20 explicit canonical sections (static module constant)
+const DOSSIER_SECTIONS = [
+  { id: 'sec-01-exec-summary', num: 1, title: 'Executive Summary', category: 'Overview', icon: Award },
+  { id: 'sec-02-dna', num: 2, title: 'Project DNA', category: 'Architecture', icon: Dna },
+  { id: 'sec-03-problem', num: 3, title: 'Problem Analysis', category: 'Foundation', icon: AlertTriangle },
+  { id: 'sec-04-tech-audit', num: 4, title: 'Technical Audit', category: 'Engineering', icon: Cpu },
+  { id: 'sec-05-originality', num: 5, title: 'Innovation & Originality', category: 'Intellectual Property', icon: Fingerprint },
+  { id: 'sec-06-claims', num: 6, title: 'Claim Verification', category: 'Empirical Proof', icon: CheckCircle2 },
+  { id: 'sec-07-presentation', num: 7, title: 'Presentation Analysis', category: 'Communication', icon: Mic },
+  { id: 'sec-08-demo', num: 8, title: 'Demo Analysis', category: 'Execution', icon: Video },
+  { id: 'sec-09-social-impact', num: 9, title: 'Social Impact', category: 'Humanitarian', icon: HeartHandshake },
+  { id: 'sec-10-economic-impact', num: 10, title: 'Economic Impact', category: 'Market Value', icon: DollarSign },
+  { id: 'sec-11-environmental-impact', num: 11, title: 'Environmental Impact', category: 'Sustainability', icon: Leaf },
+  { id: 'sec-12-feasibility', num: 12, title: 'Feasibility & Readiness', category: 'TRL & Maturity', icon: Wrench },
+  { id: 'sec-13-risks', num: 13, title: 'Risk Matrix', category: 'Vulnerabilities', icon: ShieldAlert },
+  { id: 'sec-14-improvements', num: 14, title: 'Recommended Improvements', category: 'Coaching', icon: Lightbulb },
+  { id: 'sec-15-future-scope', num: 15, title: 'Future Scope', category: 'Roadmap', icon: Compass },
+  { id: 'sec-16-commercialization', num: 16, title: 'Commercialization Potential', category: 'Business Model', icon: TrendingUp },
+  { id: 'sec-17-judge-questions', num: 17, title: 'Judge Questions', category: 'Defense Inquiries', icon: Gavel },
+  { id: 'sec-18-evidence', num: 18, title: 'Evidence Locker', category: 'Provenance', icon: FileText },
+  { id: 'sec-19-sources', num: 19, title: 'External Sources', category: 'Citations', icon: BookOpen },
+  { id: 'sec-20-verdict', num: 20, title: 'Final AI Jury Verdict', category: 'Consensus', icon: Scale },
+];
+
 export const MasterEvaluationDossier: React.FC<MasterEvaluationDossierProps> = ({
+  evaluationId,
   onBackToOverview,
   defaultProjectType = 'hardware',
+  initialDossier,
+  softwareDossier,
+  hardwareDossier,
 }) => {
   const [selectedTrack, setSelectedTrack] = useState<'software' | 'hardware'>(defaultProjectType);
   const [selectedAudience, setSelectedAudience] = useState<AudiencePreset>('university');
   const [activeSectionId, setActiveSectionId] = useState<string>('sec-01-exec-summary');
   const [copiedQuestionId, setCopiedQuestionId] = useState<string | null>(null);
+  const [liveDossier, setLiveDossier] = useState<any>(initialDossier || null);
 
-  const dossier = selectedTrack === 'hardware' ? MOCK_HARDWARE_DOSSIER : MOCK_SOFTWARE_DOSSIER;
+  useEffect(() => {
+    if (!evaluationId) return;
+    let isMounted = true;
+    api.getDossier(evaluationId)
+      .then((data) => {
+        if (data && isMounted) {
+          setLiveDossier(data);
+        }
+      })
+      .catch(() => {});
+    return () => { isMounted = false; };
+  }, [evaluationId]);
 
-  // The 20 explicit sections
-  const sections = [
-    { id: 'sec-01-exec-summary', num: 1, title: 'Executive Summary', category: 'Overview', icon: Award },
-    { id: 'sec-02-dna', num: 2, title: 'Project DNA', category: 'Architecture', icon: Dna },
-    { id: 'sec-03-problem', num: 3, title: 'Problem Analysis', category: 'Foundation', icon: AlertTriangle },
-    { id: 'sec-04-tech-audit', num: 4, title: 'Technical Audit', category: 'Engineering', icon: Cpu },
-    { id: 'sec-05-originality', num: 5, title: 'Innovation & Originality', category: 'Intellectual Property', icon: Fingerprint },
-    { id: 'sec-06-claims', num: 6, title: 'Claim Verification', category: 'Empirical Proof', icon: CheckCircle2 },
-    { id: 'sec-07-presentation', num: 7, title: 'Presentation Analysis', category: 'Communication', icon: Mic },
-    { id: 'sec-08-demo', num: 8, title: 'Demo Analysis', category: 'Execution', icon: Video },
-    { id: 'sec-09-social-impact', num: 9, title: 'Social Impact', category: 'Humanitarian', icon: HeartHandshake },
-    { id: 'sec-10-economic-impact', num: 10, title: 'Economic Impact', category: 'Market Value', icon: DollarSign },
-    { id: 'sec-11-environmental-impact', num: 11, title: 'Environmental Impact', category: 'Sustainability', icon: Leaf },
-    { id: 'sec-12-feasibility', num: 12, title: 'Feasibility & Readiness', category: 'TRL & Maturity', icon: Wrench },
-    { id: 'sec-13-risks', num: 13, title: 'Risk Matrix', category: 'Vulnerabilities', icon: ShieldAlert },
-    { id: 'sec-14-improvements', num: 14, title: 'Recommended Improvements', category: 'Coaching', icon: Lightbulb },
-    { id: 'sec-15-future-scope', num: 15, title: 'Future Scope', category: 'Roadmap', icon: Compass },
-    { id: 'sec-16-commercialization', num: 16, title: 'Commercialization Potential', category: 'Business Model', icon: TrendingUp },
-    { id: 'sec-17-judge-questions', num: 17, title: 'Judge Questions', category: 'Defense Inquiries', icon: Gavel },
-    { id: 'sec-18-evidence', num: 18, title: 'Evidence Locker', category: 'Provenance', icon: FileText },
-    { id: 'sec-19-sources', num: 19, title: 'External Sources', category: 'Citations', icon: BookOpen },
-    { id: 'sec-20-verdict', num: 20, title: 'Final AI Jury Verdict', category: 'Consensus', icon: Scale },
-  ];
+  const dossier: MasterDossierData = useMemo(() => {
+    const base: MasterDossierData = selectedTrack === 'hardware'
+      ? (hardwareDossier || (initialDossier as MasterDossierData) || MOCK_HARDWARE_DOSSIER)
+      : (softwareDossier || (initialDossier as MasterDossierData) || MOCK_SOFTWARE_DOSSIER);
+
+    if (!liveDossier) return base;
+
+    return {
+      ...base,
+      ...liveDossier,
+    };
+  }, [selectedTrack, hardwareDossier, softwareDossier, initialDossier, liveDossier]);
 
   // Scrollspy observer to highlight active section in table of contents
   useEffect(() => {
     const handleScroll = () => {
       const scrollPos = window.scrollY + 180;
-      for (let i = sections.length - 1; i >= 0; i--) {
-        const el = document.getElementById(sections[i].id);
+      for (let i = DOSSIER_SECTIONS.length - 1; i >= 0; i--) {
+        const el = document.getElementById(DOSSIER_SECTIONS[i].id);
         if (el && el.offsetTop <= scrollPos) {
-          setActiveSectionId(sections[i].id);
+          setActiveSectionId(DOSSIER_SECTIONS[i].id);
           break;
         }
       }
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [sections]);
+  }, []);
 
   const scrollToSection = (id: string) => {
     setActiveSectionId(id);
@@ -133,7 +167,7 @@ export const MasterEvaluationDossier: React.FC<MasterEvaluationDossierProps> = (
 
               {/* Navigation List */}
               <nav className="space-y-1">
-                {sections.map((sec) => {
+                {DOSSIER_SECTIONS.map((sec) => {
                   const isActive = activeSectionId === sec.id;
                   const Icon = sec.icon;
 

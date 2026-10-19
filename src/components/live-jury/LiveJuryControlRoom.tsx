@@ -7,14 +7,23 @@ import { LiveTranscriptPanel } from './LiveTranscriptPanel';
 import { EvidenceStatusPanel } from './EvidenceStatusPanel';
 import { EvaluationVerdictModal } from './EvaluationVerdictModal';
 
-interface LiveJuryControlRoomProps {
+export interface LiveJuryControlRoomProps {
   onBackToOverview: () => void;
   onViewDossier: () => void;
+  evaluationId?: string;
+  transcript?: any;
+  metrics?: any;
+  claims?: any;
+  evidenceStatus?: any;
 }
 
 export const LiveJuryControlRoom: React.FC<LiveJuryControlRoomProps> = ({
   onBackToOverview,
   onViewDossier,
+  transcript,
+  metrics,
+  claims,
+  evidenceStatus,
 }) => {
   const [timerSeconds, setTimerSeconds] = useState(272); // Starts at 04:32 for realism
   const [isPaused, setIsPaused] = useState(false);
@@ -76,7 +85,7 @@ export const LiveJuryControlRoom: React.FC<LiveJuryControlRoomProps> = ({
           {/* Small AI Analysis & Metrics Panel */}
           {!isExpandedCamera && (
             <div className="lg:col-span-5">
-              <LiveMetricsPanel />
+              <LiveMetricsPanel metrics={metrics} />
             </div>
           )}
         </div>
@@ -85,7 +94,7 @@ export const LiveJuryControlRoom: React.FC<LiveJuryControlRoomProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Current Claim Detection Panel */}
           <div className="lg:col-span-6">
-            <ClaimDetectionPanel />
+            <ClaimDetectionPanel claims={claims} />
           </div>
 
           {/* Live Audio Transcript Panel */}
@@ -93,13 +102,14 @@ export const LiveJuryControlRoom: React.FC<LiveJuryControlRoomProps> = ({
             <LiveTranscriptPanel
               isVisible={transcriptVisible}
               onToggleVisibility={handleToggleTranscript}
+              transcript={transcript}
             />
           </div>
         </div>
 
         {/* Evidence Status Panel */}
         <div>
-          <EvidenceStatusPanel />
+          <EvidenceStatusPanel evidenceStatus={evidenceStatus} />
         </div>
       </div>
 

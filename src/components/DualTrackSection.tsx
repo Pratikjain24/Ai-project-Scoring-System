@@ -9,10 +9,18 @@ import {
 } from 'lucide-react';
 import { SOFTWARE_TRACK_DATA, HARDWARE_TRACK_DATA, type TrackFeature } from '../data/mockData';
 
-export const DualTrackSection: React.FC = () => {
+export interface DualTrackSectionProps {
+  softwareData?: TrackFeature;
+  hardwareData?: TrackFeature;
+}
+
+export const DualTrackSection: React.FC<DualTrackSectionProps> = ({
+  softwareData = SOFTWARE_TRACK_DATA,
+  hardwareData = HARDWARE_TRACK_DATA,
+}) => {
   const [activeTrack, setActiveTrack] = useState<'software' | 'hardware'>('hardware');
 
-  const currentData: TrackFeature = activeTrack === 'software' ? SOFTWARE_TRACK_DATA : HARDWARE_TRACK_DATA;
+  const currentData: TrackFeature = activeTrack === 'software' ? softwareData : hardwareData;
 
   return (
     <section id="dual-track" className="py-24 relative bg-[#090D16] border-t border-white/[0.06]">

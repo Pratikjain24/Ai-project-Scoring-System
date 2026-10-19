@@ -22,6 +22,7 @@ import type {
   ReportSourceCitation,
   ReportEvidenceIndexItem,
   ReportSections,
+  ReportSectionItem,
   EvaluationReport,
   ReportShare,
   ReportVersionMeta,
@@ -52,8 +53,10 @@ export type {
   ReportSourceCitation,
   ReportEvidenceIndexItem,
   ReportSections,
+  ReportSectionItem,
   EvaluationReport,
   ReportShare,
   ReportVersionMeta,
   ReportDiff
 };
+

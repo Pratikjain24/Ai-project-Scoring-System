@@ -30,11 +30,15 @@ import { ClaimCard } from './ClaimCard';
 import { ClaimDetailDrawer } from './ClaimDetailDrawer';
 import { api } from '../../services/api';
 
-interface ClaimVerificationModuleProps {
+export interface ClaimVerificationModuleProps {
   evaluationId?: string;
   onBackToOverview?: () => void;
   onViewImpactFeasibility?: () => void;
   defaultProjectType?: 'software' | 'hardware';
+  initialReport?: ClaimVerificationReport;
+  softwareClaims?: ClaimVerificationReport;
+  hardwareClaims?: ClaimVerificationReport;
+  initialSummary?: EvaluationClaimsSummary;
 }
 
 const mapBackendStatusToFrontend = (status: string): ClaimStatus => {
@@ -70,6 +74,10 @@ export const ClaimVerificationModule: React.FC<ClaimVerificationModuleProps> = (
   onBackToOverview,
   onViewImpactFeasibility,
   defaultProjectType = 'software',
+  initialReport,
+  softwareClaims,
+  hardwareClaims,
+  initialSummary,
 }) => {
   const [selectedProjectType, setSelectedProjectType] = useState<'software' | 'hardware'>(defaultProjectType);
   const [selectedStatus, setSelectedStatus] = useState<ClaimStatus | 'all'>('all');
@@ -118,7 +126,16 @@ export const ClaimVerificationModule: React.FC<ClaimVerificationModuleProps> = (
   }, [evaluationId]);
 
   useEffect(() => {
-    loadClaimsData();
+    let isMounted = true;
+    const fetchAsync = async () => {
+      if (isMounted) {
+        await loadClaimsData();
+      }
+    };
+    fetchAsync();
+    return () => {
+      isMounted = false;
+    };
   }, [loadClaimsData]);
 
   // Trigger full Phase 7 analysis pipeline
@@ -134,7 +151,7 @@ export const ClaimVerificationModule: React.FC<ClaimVerificationModuleProps> = (
       } else {
         setExportNotice('Analysis pipeline completed with fallback telemetry.');
       }
-    } catch (err: any) {
+    } catch {
       setExportNotice('Notice: Analysis pipeline executed locally.');
       await loadClaimsData();
     } finally {
@@ -143,17 +160,21 @@ export const ClaimVerificationModule: React.FC<ClaimVerificationModuleProps> = (
     }
   };
 
-  // Base mock report
-  const baseReport = selectedProjectType === 'software' ? MOCK_SOFTWARE_CLAIMS : MOCK_HARDWARE_CLAIMS;
+  // Base report with props or mock fallback
+  const baseReport = selectedProjectType === 'software'
+    ? (softwareClaims || initialReport || MOCK_SOFTWARE_CLAIMS)
+    : (hardwareClaims || initialReport || MOCK_HARDWARE_CLAIMS);
+
+  const activeSummary = backendSummary || initialSummary;
 
   // Synthesize active report with live backend data when available
   const report: ClaimVerificationReport = useMemo(() => {
-    if (selectedProjectType === 'hardware' || !backendSummary || !backendSummary.claims || backendSummary.claims.length === 0) {
+    if (!activeSummary || !activeSummary.claims || activeSummary.claims.length === 0) {
       return baseReport;
     }
 
     const backendClaimsMap = new Map<string, any>();
-    for (const bc of backendSummary.claims) {
+    for (const bc of activeSummary.claims) {
       backendClaimsMap.set(bc.id, bc);
     }
 
@@ -184,7 +205,7 @@ export const ClaimVerificationModule: React.FC<ClaimVerificationModuleProps> = (
 
     // Also include any dynamically discovered document claims (e.g. clm_doc_*)
     const extraClaims: ProjectClaim[] = [];
-    for (const bc of backendSummary.claims) {
+    for (const bc of activeSummary.claims) {
       const alreadyIncluded = updatedCanonicalClaims.some((c) => c.id === bc.id);
       if (!alreadyIncluded) {
         extraClaims.push({
@@ -287,12 +308,12 @@ export const ClaimVerificationModule: React.FC<ClaimVerificationModuleProps> = (
     return {
       ...baseReport,
       totalClaimsCount: totalClaims,
-      overallVerificationRate: backendSummary.overallReliabilityRate || overallRate,
-      averageConfidence: backendSummary.averageConfidence || baseReport.averageConfidence,
+      overallVerificationRate: activeSummary.overallReliabilityRate || overallRate,
+      averageConfidence: activeSummary.averageConfidence || baseReport.averageConfidence,
       statusBreakdown,
       claims: allSynthesizedClaims,
     };
-  }, [baseReport, backendSummary, selectedProjectType]);
+  }, [baseReport, activeSummary]);
 
   // Filter claims
   const filteredClaims = report.claims.filter((claim) => {
@@ -321,6 +342,11 @@ export const ClaimVerificationModule: React.FC<ClaimVerificationModuleProps> = (
   const handleAddToDocket = (question: string) => {
     if (!docketQuestions.includes(question)) {
       setDocketQuestions([...docketQuestions, question]);
+      setExportNotice(`✓ Added inquiry to Judge Docket (${docketQuestions.length + 1} total questions)`);
+      setTimeout(() => setExportNotice(null), 3000);
+    } else {
+      setExportNotice('Inquiry is already in Judge Docket');
+      setTimeout(() => setExportNotice(null), 2500);
     }
   };
 
@@ -336,11 +362,18 @@ export const ClaimVerificationModule: React.FC<ClaimVerificationModuleProps> = (
   };
 
   const handleExportDossier = () => {
-    setExportNotice('Exporting Comprehensive Claim Verification Dossier (PDF/JSON)...');
+    setExportNotice('Exporting Comprehensive Claim Verification Dossier...');
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(report, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `${report.projectName.toLowerCase().replace(/\s+/g, '_')}_claim_verification_dossier.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
     setTimeout(() => {
-      setExportNotice('✓ Claim Verification Dossier downloaded: ' + report.projectName + '_Claim_Audit.pdf');
+      setExportNotice(`✓ Claim Verification Dossier downloaded: ${report.projectName}_Claim_Audit.json`);
       setTimeout(() => setExportNotice(null), 4000);
-    }, 1200);
+    }, 600);
   };
 
   return (
@@ -383,6 +416,14 @@ export const ClaimVerificationModule: React.FC<ClaimVerificationModuleProps> = (
             <span>·</span>
             <span className="text-emerald-400 font-bold">{report.overallVerificationRate}% Verified</span>
             <span>·</span>
+            <button
+              onClick={() => setDocketModalOpen(true)}
+              className="px-3 py-1.5 rounded-xl bg-amber-950/80 hover:bg-amber-900 border border-amber-500/50 text-amber-300 font-mono text-xs flex items-center gap-1.5 transition-all shadow-sm hover:shadow-amber-900/40"
+              title="Inspect active judge inquiries"
+            >
+              <Gavel className="w-3.5 h-3.5 text-amber-400" />
+              <span>Jury Docket ({docketQuestions.length})</span>
+            </button>
             <button
               onClick={handleRunTruthAnalysis}
               disabled={isAnalyzing}

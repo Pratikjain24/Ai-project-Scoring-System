@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ArrowLeft, 
   Download, 
@@ -16,7 +16,8 @@ import type {
   AnalysisMode, 
   SpeechMetric, 
   PresentationEvent, 
-  DemoFeatureItem 
+  DemoFeatureItem,
+  PresentationDemoReport
 } from '../../types/presentationDemo';
 import { 
   MOCK_HARDWARE_PRES_DEMO, 
@@ -31,11 +32,14 @@ import { ClaimDemoMatchSection } from './ClaimDemoMatchSection';
 import { api } from '../../services/api';
 import type { MultimodalAnalysisBundle } from '../../types/multimodal';
 
-interface PresentationDemoModuleProps {
+export interface PresentationDemoModuleProps {
   onBackToOverview?: () => void;
   onViewAIJury?: () => void;
   defaultProjectType?: 'software' | 'hardware';
   evaluationId?: string;
+  initialReport?: PresentationDemoReport;
+  hardwareReport?: PresentationDemoReport;
+  softwareReport?: PresentationDemoReport;
 }
 
 export const PresentationDemoModule: React.FC<PresentationDemoModuleProps> = ({
@@ -43,6 +47,9 @@ export const PresentationDemoModule: React.FC<PresentationDemoModuleProps> = ({
   onViewAIJury,
   defaultProjectType = 'hardware',
   evaluationId = 'eval_smart-road-vision',
+  initialReport,
+  hardwareReport,
+  softwareReport,
 }) => {
   const [selectedTrack, setSelectedTrack] = useState<'software' | 'hardware'>(defaultProjectType);
   const [activeMode, setActiveMode] = useState<AnalysisMode>('demo-playback');
@@ -52,7 +59,18 @@ export const PresentationDemoModule: React.FC<PresentationDemoModuleProps> = ({
   const [videoAnalysis, setVideoAnalysis] = useState<MultimodalAnalysisBundle | null>(null);
   const [activeSeekTimestamp, setActiveSeekTimestamp] = useState<number>(0);
 
-  const report = selectedTrack === 'hardware' ? MOCK_HARDWARE_PRES_DEMO : MOCK_SOFTWARE_PRES_DEMO;
+  const report: PresentationDemoReport = useMemo(() => {
+    const base = selectedTrack === 'hardware'
+      ? (hardwareReport || initialReport || MOCK_HARDWARE_PRES_DEMO)
+      : (softwareReport || initialReport || MOCK_SOFTWARE_PRES_DEMO);
+    if (!videoAnalysis) return base;
+    const demoScore = videoAnalysis.presentationMetrics?.clarityScore;
+    return {
+      ...base,
+      compositeScore: demoScore ? Math.round((base.compositeScore + demoScore) / 2) : base.compositeScore,
+      confidenceLevel: videoAnalysis.presentationMetrics ? 88 : base.confidenceLevel,
+    };
+  }, [selectedTrack, hardwareReport, softwareReport, initialReport, videoAnalysis]);
 
   // Fetch real/seeded video analysis from backend on mount
   useEffect(() => {
@@ -71,10 +89,17 @@ export const PresentationDemoModule: React.FC<PresentationDemoModuleProps> = ({
 
   const handleExportReport = () => {
     setExportNotice(`Exporting Presentation & Demo Analysis Dossier (${report.projectName})...`);
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(report, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `${report.projectName.toLowerCase().replace(/\s+/g, '_')}_presentation_audit.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
     setTimeout(() => {
-      setExportNotice(`✓ Presentation & Demo Dossier downloaded: ${report.projectName}_Presentation_Audit.pdf`);
+      setExportNotice(`✓ Presentation & Demo Dossier downloaded: ${report.projectName}_Presentation_Audit.json`);
       setTimeout(() => setExportNotice(null), 4000);
-    }, 1200);
+    }, 600);
   };
 
   const handleEventClick = (event: PresentationEvent) => {

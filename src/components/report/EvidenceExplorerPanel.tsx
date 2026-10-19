@@ -40,8 +40,11 @@ export const EvidenceExplorerPanel: React.FC<EvidenceExplorerPanelProps> = ({
   // Sync external selection
   React.useEffect(() => {
     if (selectedEvidenceId) {
-      setInternalSelectedId(selectedEvidenceId);
-      setActiveTab('evidence');
+      const timer = setTimeout(() => {
+        setInternalSelectedId(selectedEvidenceId);
+        setActiveTab('evidence');
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [selectedEvidenceId]);
 

@@ -10,45 +10,62 @@ import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { DataTable } from '../components/ui/DataTable';
 import type { Column } from '../components/ui/DataTable';
+import { ApiErrorAlert } from '../components/ui/ApiErrorAlert';
 import { MOCK_EVALUATIONS } from '../data/mockEvaluationsList';
 import type { ProjectEvaluationItem } from '../data/mockEvaluationsList';
 import { api } from '../services/api';
+import { useProjectsQuery } from '../hooks/useQueries';
 
 export const EvaluationsListPage: React.FC = () => {
   const navigate = useNavigate();
-  const [projectsList, setProjectsList] = useState<ProjectEvaluationItem[]>(MOCK_EVALUATIONS);
+  const allowDevMock = api.isMockFallbackAllowed();
+  
+  const { data: rawProjects, isLoading, isError, error, refetch, isRefetching } = useProjectsQuery();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'All' | 'Software' | 'Hardware'>('All');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Completed' | 'Analyzing' | 'Needs Review' | 'Failed'>('All');
   const [scoreFilter, setScoreFilter] = useState<'All' | 'high' | 'mid' | 'low'>('All');
   const [sortBy, setSortBy] = useState<'updated' | 'score' | 'originality' | 'impact' | 'technical'>('updated');
 
-  React.useEffect(() => {
-    let mounted = true;
-    api.getProjects().then((data) => {
-      if (mounted && data && data.length > 0) {
-        setProjectsList(data.map((p: any) => ({
+  const projectsList = useMemo<ProjectEvaluationItem[]>(() => {
+    if (rawProjects && rawProjects.length > 0) {
+      return rawProjects.map((p: any) => {
+        const arch = p.architectureType || p.type || 'SOFTWARE';
+        const typeNormalized = arch.toUpperCase() === 'HARDWARE' ? 'Hardware' : 'Software';
+        return {
           ...p,
-          overallScore: p.overallScore || 84.7,
-          originalityScore: p.originalityScore || 68,
-          impactScore: p.impactScore || 92,
-          technicalScore: p.technicalScore || 87,
+          id: p.id,
+          name: p.name || p.title || 'Untitled Project',
+          domain: p.domain || p.category || 'General Technology',
+          team: p.team || p.teamName || 'Engineering Research Team',
+          type: typeNormalized,
+          overallScore: Number(p.overallScore) || 84.7,
+          originalityScore: Number(p.originalityScore) || 68,
+          impactScore: Number(p.impactScore) || 92,
+          technicalScore: Number(p.technicalScore) || 87,
           status: p.status || 'Completed',
-          updatedAt: p.updatedAt || 'Recently',
-        })));
-      }
-    }).catch(() => {});
-    return () => { mounted = false; };
-  }, []);
+          updatedAt: p.updatedAt ? (p.updatedAt.includes('T') ? new Date(p.updatedAt).toLocaleDateString() : p.updatedAt) : 'Recently',
+        };
+      });
+    }
+
+    if (allowDevMock) {
+      return MOCK_EVALUATIONS;
+    }
+
+    return [];
+  }, [rawProjects, allowDevMock]);
 
   const filteredProjects = useMemo(() => {
     return projectsList.filter((item) => {
       // Search query
+      const query = searchQuery.trim().toLowerCase();
       const matchesSearch =
-        searchQuery === '' ||
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.domain.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.team.toLowerCase().includes(searchQuery.toLowerCase());
+        query === '' ||
+        (item.name || '').toLowerCase().includes(query) ||
+        (item.domain || '').toLowerCase().includes(query) ||
+        (item.team || '').toLowerCase().includes(query);
 
       // Type
       const matchesType = typeFilter === 'All' || item.type === typeFilter;
@@ -70,7 +87,7 @@ export const EvaluationsListPage: React.FC = () => {
       if (sortBy === 'technical') return b.technicalScore - a.technicalScore;
       return 0; // Default ordering
     });
-  }, [searchQuery, typeFilter, statusFilter, scoreFilter, sortBy]);
+  }, [projectsList, searchQuery, typeFilter, statusFilter, scoreFilter, sortBy]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -138,7 +155,9 @@ export const EvaluationsListPage: React.FC = () => {
       header: 'Originality',
       sortable: true,
       render: (item) => (
-        <span className="font-mono text-slate-300">{item.originalityScore}%</span>
+        <div className="font-mono text-xs text-slate-300">
+          {item.originalityScore}%
+        </div>
       ),
     },
     {
@@ -146,7 +165,9 @@ export const EvaluationsListPage: React.FC = () => {
       header: 'Impact',
       sortable: true,
       render: (item) => (
-        <span className="font-mono text-slate-300">{item.impactScore}%</span>
+        <div className="font-mono text-xs text-slate-300">
+          {item.impactScore}%
+        </div>
       ),
     },
     {
@@ -154,7 +175,9 @@ export const EvaluationsListPage: React.FC = () => {
       header: 'Technical',
       sortable: true,
       render: (item) => (
-        <span className="font-mono text-slate-300">{item.technicalScore}%</span>
+        <div className="font-mono text-xs text-slate-300">
+          {item.technicalScore}%
+        </div>
       ),
     },
     {
@@ -168,31 +191,56 @@ export const EvaluationsListPage: React.FC = () => {
       header: 'Updated',
       sortable: true,
       render: (item) => (
-        <span className="text-slate-400 font-mono text-[11px]">{item.updatedAt}</span>
+        <span className="text-xs text-slate-400 font-mono">
+          {item.updatedAt}
+        </span>
       ),
     },
   ];
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="space-y-6">
+      {/* Header bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100 dark:text-slate-100 light:text-slate-900 tracking-tight">
-            Evaluation Catalog
+          <h1 className="text-2xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
+            <span>Evaluations Repository</span>
+            {isRefetching && <RefreshCw className="w-4 h-4 animate-spin text-cyan-400" />}
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Search, filter, and inspect evidence dossiers across all software and hardware cohorts
+            Browse and query AI Juror assessments, technical verification audits, and institutional verdicts.
           </p>
         </div>
 
-        <Link to="/new-evaluation">
-          <Button variant="primary" size="sm" className="flex items-center gap-2">
-            <PlusCircle className="w-4 h-4" />
-            <span>+ New Evaluation</span>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            disabled={isLoading || isRefetching}
+            className="flex items-center gap-1.5 text-xs text-slate-300"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefetching ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
           </Button>
-        </Link>
+          <Link to="/new-evaluation">
+            <Button variant="primary" size="sm" className="flex items-center gap-2">
+              <PlusCircle className="w-4 h-4" />
+              <span>+ New Evaluation</span>
+            </Button>
+          </Link>
+        </div>
       </div>
+
+      {/* Explicit Error Alert if query fails */}
+      {isError && (
+        <ApiErrorAlert
+          error={error}
+          title="Failed to Load Evaluations"
+          onRetry={() => refetch()}
+          isRetrying={isRefetching}
+        />
+      )}
 
       {/* Search & Filter Bar */}
       <Card className="p-4 bg-slate-900/60 border-slate-800 space-y-3">
@@ -270,7 +318,7 @@ export const EvaluationsListPage: React.FC = () => {
         <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/80">
           <div>
             Showing <strong className="text-slate-200">{filteredProjects.length}</strong> of{' '}
-            <strong className="text-slate-200">{MOCK_EVALUATIONS.length}</strong> evaluated projects
+            <strong className="text-slate-200">{projectsList.length}</strong> evaluated projects
           </div>
           {(searchQuery || typeFilter !== 'All' || statusFilter !== 'All' || scoreFilter !== 'All') && (
             <button
@@ -290,15 +338,25 @@ export const EvaluationsListPage: React.FC = () => {
         </div>
       </Card>
 
+      {/* Loading state indicator */}
+      {isLoading && (
+        <div className="py-12 flex flex-col items-center justify-center gap-3 text-slate-400">
+          <RefreshCw className="w-6 h-6 animate-spin text-cyan-400" />
+          <p className="text-xs font-mono">Fetching evaluation catalog...</p>
+        </div>
+      )}
+
       {/* Data Table */}
-      <DataTable
-        columns={columns}
-        data={filteredProjects}
-        keyField="id"
-        onRowClick={(item) => navigate(`/evaluations/${item.id}`)}
-        emptyTitle="No evaluations matched your search"
-        emptyDescription="Try clearing your filters or changing the search keyword."
-      />
+      {!isLoading && (
+        <DataTable
+          columns={columns}
+          data={filteredProjects}
+          keyField="id"
+          onRowClick={(item) => navigate(`/evaluations/${item.id}`)}
+          emptyTitle="No evaluations matched your search"
+          emptyDescription="Try clearing your filters or changing the search keyword."
+        />
+      )}
     </div>
   );
 };

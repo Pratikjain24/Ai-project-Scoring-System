@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -37,7 +37,7 @@ export const OriginalityIntelligenceModule: React.FC<OriginalityIntelligenceModu
   const [activeTab, setActiveTab] = useState<ActiveViewTab>('overview');
   const [showReportModal, setShowReportModal] = useState(false);
 
-  const fetchBundle = async () => {
+  const fetchBundle = useCallback(async () => {
     try {
       setLoading(true);
       const data = await api.getOriginalityBundle(evaluationId);
@@ -53,11 +53,20 @@ export const OriginalityIntelligenceModule: React.FC<OriginalityIntelligenceModu
     } finally {
       setLoading(false);
     }
-  };
+  }, [evaluationId]);
 
   useEffect(() => {
-    fetchBundle();
-  }, [evaluationId]);
+    let isMounted = true;
+    const fetchAsync = async () => {
+      if (isMounted) {
+        await fetchBundle();
+      }
+    };
+    fetchAsync();
+    return () => {
+      isMounted = false;
+    };
+  }, [fetchBundle]);
 
   const handleUpdateWeights = async (newWeights: DimensionWeightConfig) => {
     try {

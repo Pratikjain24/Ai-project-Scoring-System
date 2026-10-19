@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Play, 
   RotateCw, 
@@ -39,7 +39,7 @@ export const EvaluationCommandCenter: React.FC<EvaluationCommandCenterProps> = (
   const [activeTab, setActiveTab] = useState<'pipeline' | 'integrity' | 'checkpoints'>('pipeline');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const fetchStatus = async () => {
+  const fetchStatus = useCallback(async () => {
     try {
       setLoading(true);
       const [prog, integ] = await Promise.all([
@@ -55,15 +55,105 @@ export const EvaluationCommandCenter: React.FC<EvaluationCommandCenterProps> = (
     } finally {
       setLoading(false);
     }
-  };
+  }, [evaluationId]);
+
+  const [isSseActive, setIsSseActive] = useState<boolean>(false);
 
   useEffect(() => {
-    if (isOpen && evaluationId) {
-      fetchStatus();
-      const interval = setInterval(fetchStatus, 4000);
-      return () => clearInterval(interval);
-    }
-  }, [isOpen, evaluationId]);
+    if (!isOpen || !evaluationId) return;
+
+    let isMounted = true;
+    let eventSource: EventSource | null = null;
+    let fallbackInterval: any = null;
+    let reconnectTimeout: any = null;
+
+    const fetchAsync = async () => {
+      if (isMounted) {
+        await fetchStatus();
+      }
+    };
+    fetchAsync();
+
+    const stopFallback = () => {
+      if (fallbackInterval) {
+        clearInterval(fallbackInterval);
+        fallbackInterval = null;
+      }
+    };
+
+    const startFallback = () => {
+      if (fallbackInterval || !isMounted) return;
+      // Relaxed fallback only if SSE is disconnected
+      fallbackInterval = setInterval(() => {
+        if (isMounted) fetchStatus();
+      }, 15000);
+    };
+
+    const connectSse = () => {
+      if (!isMounted) return;
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+
+      try {
+        const es = api.createPipelineEventSource(evaluationId);
+        eventSource = es;
+
+        es.onopen = () => {
+          if (!isMounted) return;
+          setIsSseActive(true);
+          stopFallback();
+        };
+
+        es.onmessage = (event) => {
+          if (!isMounted) return;
+          setIsSseActive(true);
+          stopFallback();
+
+          try {
+            const data = JSON.parse(event.data);
+            if (data.orchestratorProgress) {
+              setProgress(data.orchestratorProgress);
+            } else if (data.stageIndex || data.currentState || data.state) {
+              fetchStatus();
+            }
+          } catch {
+            // Heartbeat
+          }
+        };
+
+        es.onerror = () => {
+          if (!isMounted) return;
+          setIsSseActive(false);
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+          }
+          startFallback();
+          reconnectTimeout = setTimeout(connectSse, 4000);
+        };
+      } catch {
+        setIsSseActive(false);
+        startFallback();
+        reconnectTimeout = setTimeout(connectSse, 5000);
+      }
+    };
+
+    connectSse();
+
+    return () => {
+      isMounted = false;
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+      stopFallback();
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+    };
+  }, [isOpen, evaluationId, fetchStatus]);
 
   const handleRunPipeline = async () => {
     try {
@@ -116,6 +206,13 @@ export const EvaluationCommandCenter: React.FC<EvaluationCommandCenterProps> = (
                     : 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300'
                 }`}>
                   {progress?.currentState || 'INITIALIZING'}
+                </span>
+                <span
+                  title={isSseActive ? 'Connected to live Server-Sent Events stream' : 'Syncing pipeline status...'}
+                  className="flex items-center gap-1.5 text-[11px] font-mono px-2 py-0.5 rounded border border-slate-700 bg-slate-900/80 text-slate-300"
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${isSseActive ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                  {isSseActive ? 'SSE LIVE' : 'SYNCING'}
                 </span>
                 {progress?.isLocked && (
                   <span className="flex items-center gap-1 text-xs text-amber-400 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/40">
@@ -241,7 +338,7 @@ export const EvaluationCommandCenter: React.FC<EvaluationCommandCenterProps> = (
           {/* Tab 1: Pipeline Stages */}
           {activeTab === 'pipeline' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {progress?.stages.map((stage, idx) => {
+              {(progress?.stages || []).map((stage, idx) => {
                 const isCompleted = stage.status === 'COMPLETED';
                 const isRunning = stage.status === 'RUNNING';
                 const isFailed = stage.status === 'FAILED';

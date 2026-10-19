@@ -31,8 +31,10 @@ export const ReportLoadingModal: React.FC<ReportLoadingModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) {
-      setCurrentStage(1);
-      return;
+      const resetTimer = setTimeout(() => {
+        setCurrentStage(1);
+      }, 0);
+      return () => clearTimeout(resetTimer);
     }
 
     const interval = setInterval(() => {

@@ -10,6 +10,8 @@ import {
   Cpu, 
   Eye
 } from 'lucide-react';
+import { PresenterVisionTracker } from '../../utils/presenterVisionTracker';
+import type { LivePresenterTrackingMetrics } from '../../types/liveJury';
 
 interface CameraFeedPanelProps {
   isExpanded: boolean;
@@ -23,12 +25,32 @@ export const CameraFeedPanel: React.FC<CameraFeedPanelProps> = ({
   const [cameraActive, setCameraActive] = useState(true);
   const [micActive, setMicActive] = useState(true);
   const [usingRealWebcam, setUsingRealWebcam] = useState(false);
+  const [metrics, setMetrics] = useState<LivePresenterTrackingMetrics | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const hudCanvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const trackerRef = useRef<PresenterVisionTracker | null>(null);
 
   // Attempt real webcam access, fallback gracefully to simulated lab feed
   useEffect(() => {
     let mounted = true;
+
+    const tracker = new PresenterVisionTracker({
+      targetFps: 30,
+      onMetricsUpdate: (m) => {
+        if (!mounted) return;
+        setMetrics(m);
+        if (hudCanvasRef.current) {
+          const canvas = hudCanvasRef.current;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            tracker.renderHUD(canvas, m);
+          }
+        }
+      }
+    });
+    trackerRef.current = tracker;
 
     async function startCamera() {
       if (!cameraActive) {
@@ -37,25 +59,66 @@ export const CameraFeedPanel: React.FC<CameraFeedPanelProps> = ({
           streamRef.current = null;
         }
         setUsingRealWebcam(false);
+        tracker.stop();
         return;
       }
 
       try {
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          console.log('[CameraFeed] Requesting camera access...');
           const stream = await navigator.mediaDevices.getUserMedia({
             video: { width: { ideal: 1280 }, height: { ideal: 720 } },
             audio: false,
           });
+          
           if (mounted && videoRef.current) {
             videoRef.current.srcObject = stream;
-            videoRef.current.play().catch(() => {});
+            
+            try {
+              await videoRef.current.play();
+              console.log('[CameraFeed] ✅ Video playback started successfully');
+            } catch (playError) {
+              console.error('[CameraFeed] Video playback failed:', playError);
+            }
+            
             streamRef.current = stream;
             setUsingRealWebcam(true);
+            
+            const trackerStarted = await tracker.startWebcam(videoRef.current);
+            if (trackerStarted) {
+              console.log('[CameraFeed] ✅ Presenter tracking initialized');
+            } else {
+              console.warn('[CameraFeed] Tracker started in simulation mode');
+            }
           }
         } else {
+          console.warn('[CameraFeed] getUserMedia API not available in this browser');
           setUsingRealWebcam(false);
         }
-      } catch {
+      } catch (error) {
+        console.error('[CameraFeed] ❌ Camera initialization failed:', error);
+        
+        if (error instanceof DOMException) {
+          if (error.name === 'NotAllowedError') {
+            console.error('❌ Camera permission denied by user');
+            alert('Camera access denied. Please allow camera permissions in your browser settings and refresh the page.');
+          } else if (error.name === 'NotFoundError') {
+            console.error('❌ No camera device found');
+            alert('No camera detected. Please connect a webcam and try again.');
+          } else if (error.name === 'NotReadableError') {
+            console.error('❌ Camera is already in use by another application');
+            alert('Camera is in use by another application. Please close it and try again.');
+          } else if (error.name === 'NotSupportedError') {
+            console.error('❌ Camera access requires HTTPS or localhost');
+            alert('⚠️ Camera requires secure connection!\n\nPlease access the app via:\n• http://localhost:5173\n• https://localhost:5173\n\nCurrent URL: ' + window.location.href);
+          } else {
+            console.error('❌ Camera error:', error.name, error.message);
+            alert('Camera error: ' + error.message);
+          }
+        } else {
+          console.error('❌ Unknown camera error:', error);
+        }
+        
         if (mounted) {
           setUsingRealWebcam(false);
         }
@@ -66,6 +129,7 @@ export const CameraFeedPanel: React.FC<CameraFeedPanelProps> = ({
 
     return () => {
       mounted = false;
+      tracker.stop();
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
@@ -117,6 +181,14 @@ export const CameraFeedPanel: React.FC<CameraFeedPanelProps> = ({
               }`}
             />
 
+            {/* Live Presenter CV HUD Overlay */}
+            <canvas
+              ref={hudCanvasRef}
+              width={1280}
+              height={720}
+              className="absolute inset-0 w-full h-full pointer-events-none z-10"
+            />
+
             {/* Simulated Lab Video / Hardware Bench Fallback when webcam is unavailable */}
             {!usingRealWebcam && (
               <div className="absolute inset-0 w-full h-full bg-[#080C14] flex items-center justify-center overflow-hidden">
@@ -158,7 +230,7 @@ export const CameraFeedPanel: React.FC<CameraFeedPanelProps> = ({
             {/* Box 2: Presenter Face & Gaze Tracking */}
             <div className="absolute top-20 right-8 sm:right-14 border border-emerald-400/80 bg-emerald-950/40 backdrop-blur-md px-3 py-1.5 rounded-lg text-xs font-mono text-emerald-300 flex items-center gap-2 pointer-events-none shadow-lg">
               <Eye className="w-3.5 h-3.5 text-emerald-400" />
-              <span>GAZE & CONFIDENCE: 92% NOMINAL</span>
+              <span>GAZE & EYE CONTACT: {metrics ? `${metrics.eyeContactScore}% [${metrics.gazeStatus}]` : '92% NOMINAL'}</span>
             </div>
 
             {/* Box 3: Oscilloscope Ripple Telemetry */}

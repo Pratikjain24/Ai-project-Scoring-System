@@ -12,7 +12,13 @@ import {
 } from 'lucide-react';
 import { FEATURES } from '../data/mockData';
 
-export const FeaturesGrid: React.FC = () => {
+export interface FeaturesGridProps {
+  features?: typeof FEATURES;
+}
+
+export const FeaturesGrid: React.FC<FeaturesGridProps> = ({
+  features = FEATURES,
+}) => {
   const getFeatureIcon = (name: string) => {
     switch (name) {
       case 'Eye': return <Eye className="w-5 h-5 text-cyan-400" />;
@@ -54,7 +60,7 @@ export const FeaturesGrid: React.FC = () => {
 
         {/* Feature Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {FEATURES.map((feature, idx) => (
+          {features.map((feature, idx) => (
             <motion.div
               key={feature.id}
               initial={{ opacity: 0, y: 20 }}

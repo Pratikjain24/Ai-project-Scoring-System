@@ -30,21 +30,24 @@ export const SubmissionCenter: React.FC<SubmissionCenterProps> = ({ onBackToLand
   });
 
   const [currentStep, setCurrentStep] = useState<number>(draft.step || 1);
-  const [lastSavedTime, setLastSavedTime] = useState<string>('');
+  const [lastSavedTime, setLastSavedTime] = useState<string>(() => draft.lastSaved || '');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isEvaluationRunning, setIsEvaluationRunning] = useState(false);
   const [showEvaluationModal, setShowEvaluationModal] = useState(false);
 
   // Autosave to localStorage on state changes
   useEffect(() => {
-    try {
-      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      const draftToSave = { ...draft, step: currentStep, lastSaved: now };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(draftToSave));
-      setLastSavedTime(now);
-    } catch {
-      // Ignore storage errors
-    }
+    const timer = setTimeout(() => {
+      try {
+        const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const draftToSave = { ...draft, step: currentStep, lastSaved: now };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(draftToSave));
+        setLastSavedTime(now);
+      } catch {
+        // Ignore storage errors
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [draft, currentStep]);
 
   const updateDraft = (fields: Partial<SubmissionDraft>) => {

@@ -12,6 +12,7 @@ import {
   Sun,
   Moon,
   ShieldCheck,
+  Sparkles,
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { Tooltip } from '../ui/Tooltip';
@@ -32,15 +33,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
 
+  // Extract active project/eval ID dynamically if currently in workspace
+  const match = location.pathname.match(/\/evaluations\/([^/]+)/);
+  const activeEvalId = (match && match[1] !== 'new') ? match[1] : 'smart-road-vision';
+
   const navItems = [
     { label: 'Overview', path: '/dashboard', icon: LayoutDashboard },
     { label: 'New Evaluation', path: '/new-evaluation', icon: PlusCircle, badge: 'New' },
     { label: 'Evaluations', path: '/evaluations', icon: FolderKanban },
-    { label: 'Research', path: '/evaluations/smart-road-vision/originality', icon: SearchCode },
-    { label: 'Reports', path: '/evaluations/smart-road-vision/report', icon: FileCheck2 },
+    { label: 'Research', path: `/evaluations/${activeEvalId}/originality`, icon: SearchCode },
+    { label: 'Reports', path: `/evaluations/${activeEvalId}/report`, icon: FileCheck2 },
   ];
 
   const secondaryNavItems = [
+    { label: 'Showcase', path: '/landing', icon: Sparkles },
     { label: 'Admin Panel', path: '/admin', icon: ShieldCheck },
     { label: 'Settings', path: '/settings', icon: Settings },
   ];

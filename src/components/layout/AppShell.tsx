@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { CommandPalette } from '../ui/CommandPalette';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -13,6 +13,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Global Cmd+K / Ctrl+K listener
   useEffect(() => {
@@ -28,6 +29,9 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 
   const handleCommandPaletteSelect = (view: string) => {
     setIsCommandPaletteOpen(false);
+    const match = location.pathname.match(/\/evaluations\/([^/]+)/);
+    const activeEvalId = (match && match[1] !== 'new') ? match[1] : 'smart-road-vision';
+
     switch (view) {
       case 'landing':
       case 'dashboard':
@@ -37,28 +41,28 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
         navigate('/new-evaluation');
         break;
       case 'project-dna':
-        navigate('/evaluations/smart-road-vision/project');
+        navigate(`/evaluations/${activeEvalId}/project`);
         break;
       case 'technical-audit':
-        navigate('/evaluations/smart-road-vision/technical');
+        navigate(`/evaluations/${activeEvalId}/technical`);
         break;
       case 'originality':
-        navigate('/evaluations/smart-road-vision/originality');
+        navigate(`/evaluations/${activeEvalId}/originality`);
         break;
       case 'claim-verification':
-        navigate('/evaluations/smart-road-vision/claims');
+        navigate(`/evaluations/${activeEvalId}/claims`);
         break;
       case 'impact-feasibility':
-        navigate('/evaluations/smart-road-vision/impact');
+        navigate(`/evaluations/${activeEvalId}/impact`);
         break;
       case 'presentation-demo':
-        navigate('/evaluations/smart-road-vision/presentation');
+        navigate(`/evaluations/${activeEvalId}/presentation`);
         break;
       case 'ai-jury':
-        navigate('/evaluations/smart-road-vision/jury');
+        navigate(`/evaluations/${activeEvalId}/jury`);
         break;
       case 'dossier':
-        navigate('/evaluations/smart-road-vision/report');
+        navigate(`/evaluations/${activeEvalId}/report`);
         break;
       default:
         navigate('/dashboard');
@@ -78,7 +82,6 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         <TopBar
-          onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
           onToggleMobileMenu={() => setMobileOpen(true)}
         />
 

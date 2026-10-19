@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   ArrowLeft, 
   Cpu, 
@@ -15,7 +15,7 @@ import {
   ArrowRight,
   Wrench
 } from 'lucide-react';
-import type { ProjectType, EvidenceReference } from '../../types/technicalAudit';
+import type { ProjectType, EvidenceReference, TechnicalAuditReport } from '../../types/technicalAudit';
 import type { TechnicalDebtItem } from '../../types/specialistEvaluation';
 import { MOCK_SOFTWARE_AUDIT, MOCK_HARDWARE_AUDIT } from '../../data/mockTechnicalAudits';
 import { AuditRadarChart } from './AuditRadarChart';
@@ -24,11 +24,14 @@ import { AuditSummaryBanner } from './AuditSummaryBanner';
 import { EvidenceDrawerModal } from './EvidenceDrawerModal';
 import { api } from '../../services/api';
 
-interface TechnicalAuditorModuleProps {
+export interface TechnicalAuditorModuleProps {
   evaluationId?: string;
   onBackToOverview?: () => void;
   onViewOriginality?: () => void;
   defaultProjectType?: ProjectType;
+  initialReport?: TechnicalAuditReport;
+  softwareAudit?: TechnicalAuditReport;
+  hardwareAudit?: TechnicalAuditReport;
 }
 
 export const TechnicalAuditorModule: React.FC<TechnicalAuditorModuleProps> = ({
@@ -36,6 +39,9 @@ export const TechnicalAuditorModule: React.FC<TechnicalAuditorModuleProps> = ({
   onBackToOverview,
   onViewOriginality,
   defaultProjectType = 'software',
+  initialReport,
+  softwareAudit,
+  hardwareAudit,
 }) => {
   const [selectedType, setSelectedType] = useState<ProjectType>(defaultProjectType);
   const [hybridTrack, setHybridTrack] = useState<'software' | 'hardware' | 'integrated'>('integrated');
@@ -63,7 +69,16 @@ export const TechnicalAuditorModule: React.FC<TechnicalAuditorModuleProps> = ({
   }, [evaluationId]);
 
   useEffect(() => {
-    loadTechnicalData();
+    let isMounted = true;
+    const fetchAsync = async () => {
+      if (isMounted) {
+        await loadTechnicalData();
+      }
+    };
+    fetchAsync();
+    return () => {
+      isMounted = false;
+    };
   }, [loadTechnicalData]);
 
   const handleRunTechnicalAnalysis = async () => {
@@ -83,8 +98,20 @@ export const TechnicalAuditorModule: React.FC<TechnicalAuditorModuleProps> = ({
     }
   };
 
-  // Active dataset depending on mode
-  const currentReport = selectedType === 'software' ? MOCK_SOFTWARE_AUDIT : MOCK_HARDWARE_AUDIT;
+  // Active dataset depending on mode with live data synthesis
+  const currentReport: TechnicalAuditReport = useMemo(() => {
+    const base = selectedType === 'software'
+      ? (softwareAudit || initialReport || MOCK_SOFTWARE_AUDIT)
+      : (hardwareAudit || initialReport || MOCK_HARDWARE_AUDIT);
+
+    if (!liveTechnical) return base;
+
+    return {
+      ...base,
+      compositeScore: typeof liveTechnical.technicalScore === 'number' ? liveTechnical.technicalScore : base.compositeScore,
+      overallConfidence: typeof liveTechnical.technicalConfidence === 'number' ? liveTechnical.technicalConfidence : base.overallConfidence,
+    };
+  }, [selectedType, softwareAudit, hardwareAudit, initialReport, liveTechnical]);
 
   // Filter metrics based on status and search query
   const filteredMetrics = currentReport.metrics.filter((metric) => {
@@ -114,11 +141,18 @@ export const TechnicalAuditorModule: React.FC<TechnicalAuditorModuleProps> = ({
   };
 
   const handleExportDossier = () => {
-    setExportNotice('Exporting Comprehensive Technical Audit Dossier (PDF/JSON)...');
+    setExportNotice('Exporting Comprehensive Technical Audit Dossier...');
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(currentReport, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `${currentReport.projectName.toLowerCase().replace(/\s+/g, '_')}_technical_audit_dossier.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
     setTimeout(() => {
-      setExportNotice('✓ Technical Audit Dossier downloaded: ' + currentReport.projectName + '_Audit_Report.pdf');
+      setExportNotice(`✓ Technical Audit Dossier downloaded: ${currentReport.projectName}_Audit_Report.json`);
       setTimeout(() => setExportNotice(null), 4000);
-    }, 1200);
+    }, 600);
   };
 
   const isHybrid = liveTechnical?.projectType === 'HYBRID' || currentReport.projectName.toLowerCase().includes('road');

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Award, 
   Lock, 
@@ -40,7 +40,7 @@ export const HumanReviewDrawer: React.FC<HumanReviewDrawerProps> = ({
   const [reviewerNote, setReviewerNote] = useState('');
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
 
-  const fetchEvidenceRequests = async () => {
+  const fetchEvidenceRequests = useCallback(async () => {
     try {
       setLoading(true);
       const data = await api.getEvidenceRequests(evaluationId);
@@ -50,13 +50,20 @@ export const HumanReviewDrawer: React.FC<HumanReviewDrawerProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [evaluationId]);
 
   useEffect(() => {
-    if (isOpen && evaluationId) {
-      fetchEvidenceRequests();
-    }
-  }, [isOpen, evaluationId]);
+    let isMounted = true;
+    const fetchAsync = async () => {
+      if (isOpen && evaluationId && isMounted) {
+        await fetchEvidenceRequests();
+      }
+    };
+    fetchAsync();
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, evaluationId, fetchEvidenceRequests]);
 
   const handleFinalize = async () => {
     if (!confirm('Are you sure you want to finalize this evaluation? This will lock all scores, jury decisions, and reports into an immutable FINAL state.')) {

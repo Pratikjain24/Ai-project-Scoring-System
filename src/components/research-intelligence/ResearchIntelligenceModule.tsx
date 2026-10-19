@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Search,
   BookOpen,
@@ -47,11 +47,7 @@ export const ResearchIntelligenceModule: React.FC<Props> = ({
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [notification, setNotification] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadResearchData();
-  }, [evaluationId]);
-
-  const loadResearchData = async () => {
+  const loadResearchData = useCallback(async () => {
     setLoading(true);
     try {
       const data = await api.getResearchIntelligence(evaluationId);
@@ -72,7 +68,20 @@ export const ResearchIntelligenceModule: React.FC<Props> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [evaluationId]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchAsync = async () => {
+      if (isMounted) {
+        await loadResearchData();
+      }
+    };
+    fetchAsync();
+    return () => {
+      isMounted = false;
+    };
+  }, [loadResearchData]);
 
   const handleReRun = async () => {
     setRefreshing(true);

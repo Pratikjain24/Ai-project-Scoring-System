@@ -40,16 +40,20 @@ export const VideoAnalysisModule: React.FC<VideoAnalysisModuleProps> = ({
     if (!isProcessing || isPaused || isCompleted) return;
 
     if (currentStageIndex === -1) {
-      setCurrentStageIndex(0);
-      setStages((prev) =>
-        prev.map((s, idx) => (idx === 0 ? { ...s, status: 'Running', progress: 10 } : s))
-      );
+      timerRef.current = window.setTimeout(() => {
+        setCurrentStageIndex(0);
+        setStages((prev) =>
+          prev.map((s, idx) => (idx === 0 ? { ...s, status: 'Running', progress: 10 } : s))
+        );
+      }, 0);
       return;
     }
 
     if (currentStageIndex >= stages.length) {
-      setIsProcessing(false);
-      setIsCompleted(true);
+      timerRef.current = window.setTimeout(() => {
+        setIsProcessing(false);
+        setIsCompleted(true);
+      }, 0);
       return;
     }
 
@@ -68,26 +72,26 @@ export const VideoAnalysisModule: React.FC<VideoAnalysisModuleProps> = ({
       }, 250);
     } else {
       // Stage is 100%, mark as Completed (or Warning for stage 6 claim check for realism)
-      const finalStatus = currentStageIndex === 5 ? 'Warning' : 'Completed';
-      setStages((prev) =>
-        prev.map((s, idx) =>
-          idx === currentStageIndex ? { ...s, status: finalStatus, progress: 100 } : s
-        )
-      );
+      timerRef.current = window.setTimeout(() => {
+        const finalStatus = currentStageIndex === 5 ? 'Warning' : 'Completed';
+        setStages((prev) =>
+          prev.map((s, idx) =>
+            idx === currentStageIndex ? { ...s, status: finalStatus, progress: 100 } : s
+          )
+        );
 
-      // Advance to next stage
-      const nextIndex = currentStageIndex + 1;
-      if (nextIndex < stages.length) {
-        timerRef.current = window.setTimeout(() => {
+        // Advance to next stage
+        const nextIndex = currentStageIndex + 1;
+        if (nextIndex < stages.length) {
           setCurrentStageIndex(nextIndex);
           setStages((prev) =>
             prev.map((s, idx) => (idx === nextIndex ? { ...s, status: 'Running', progress: 15 } : s))
           );
-        }, 300);
-      } else {
-        setIsProcessing(false);
-        setIsCompleted(true);
-      }
+        } else {
+          setIsProcessing(false);
+          setIsCompleted(true);
+        }
+      }, 150);
     }
 
     return () => {

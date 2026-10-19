@@ -10,20 +10,22 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import type { AIJuryScorecard } from '../../types/aiJuryScoring';
-import { VERDICT_THRESHOLDS } from '../../data/mockAiJuryScoring';
+import { VERDICT_THRESHOLDS as DEFAULT_THRESHOLDS, type VerdictThreshold } from '../../config/rubricConstants';
 
 interface AIJuryVerdictCardProps {
   scorecard: AIJuryScorecard;
   onOpenMethodology: () => void;
+  thresholds?: VerdictThreshold[];
 }
 
 export const AIJuryVerdictCard: React.FC<AIJuryVerdictCardProps> = ({
   scorecard,
-  onOpenMethodology
+  onOpenMethodology,
+  thresholds = DEFAULT_THRESHOLDS
 }) => {
   const [activeJurorTab, setActiveJurorTab] = useState<number>(0);
 
-  const verdictMeta = VERDICT_THRESHOLDS.find(t => t.level === scorecard.verdictLevel) || VERDICT_THRESHOLDS[1];
+  const verdictMeta = thresholds.find(t => t.level === scorecard.verdictLevel) || thresholds[1];
 
   // Circle progress calculation (circumference for radius 54 is ~339.29)
   const radius = 54;

@@ -22,12 +22,12 @@ export const LiveFinalizationModal: React.FC<LiveFinalizationModalProps> = ({
   onViewReport,
   onClose,
 }) => {
-  const [activeStep, setActiveStep] = useState<number>(1);
+  const [activeStep, setActiveStep] = useState<number>(isProcessing ? 1 : 4);
 
   useEffect(() => {
     if (!isProcessing) {
-      setActiveStep(4);
-      return;
+      const t0 = setTimeout(() => setActiveStep(4), 0);
+      return () => clearTimeout(t0);
     }
 
     const t1 = setTimeout(() => setActiveStep(2), 600);
