@@ -4,7 +4,7 @@ import type { Evidence, EvidenceType } from '../models/evidence';
 export class EvidenceRepository {
   static create(evidence: Evidence): Evidence {
     db.run(
-      `INSERT INTO evidence (
+      `INSERT OR REPLACE INTO evidence (
         id, evaluation_id, type, source, source_title, source_url, location, content, confidence, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       evidence.id,

@@ -4,10 +4,26 @@ import type {
   TranscriptionResult,
   VideoAnalysisResult,
   ModerationResult,
+  ProviderPingResult,
+  ModelTier,
 } from './aiProvider.interface';
 
 export class MockAIProvider implements AIProvider {
-  name = 'Deterministic Mock AI Jury Provider';
+  public readonly name = 'Deterministic Mock AI Jury Provider';
+  public readonly tier: ModelTier = 'TIER_3_LOCAL';
+
+  isConfigured(): boolean {
+    return true;
+  }
+
+  async ping(): Promise<ProviderPingResult> {
+    return {
+      healthy: true,
+      latencyMs: 1,
+      provider: this.name,
+      model: 'deterministic-offline-baseline',
+    };
+  }
 
   async generateText(prompt: string, options?: TextGenerationOptions): Promise<string> {
     // If jsonMode is requested, return structured JSON based on keywords

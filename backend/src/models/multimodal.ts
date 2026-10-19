@@ -113,6 +113,52 @@ export interface ClaimDemoMatch {
   createdAt: string;
 }
 
+export type MilestoneVerificationStatus = 'VERIFIED' | 'PARTIAL' | 'NOT_DEMONSTRATED' | 'FAILED';
+
+export interface DemoMilestone {
+  id: string;
+  videoId: string;
+  evaluationId?: string;
+  milestoneName: string;
+  timestamp: number;
+  status: MilestoneVerificationStatus;
+  confidence: number;
+  frameReference?: string;
+  thumbnailUrl?: string;
+  claimId?: string;
+  evidenceId?: string;
+  verificationNotes?: string;
+  details?: Record<string, any>;
+  createdAt: string;
+}
+
+export type VideoAnomalyType =
+  | 'FRAME_DROP'
+  | 'BUFFER_OVERRUN'
+  | 'LATENCY_SPIKE'
+  | 'DETECTION_FALSE_NEGATIVE'
+  | 'TELEMETRY_DESYNC'
+  | 'ENVIRONMENT_ABSENCE'
+  | 'AUDIO_DROPOUT'
+  | 'FREEZE_FRAME';
+
+export type AnomalySeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface VideoAnomaly {
+  id: string;
+  videoId: string;
+  evaluationId?: string;
+  anomalyType: VideoAnomalyType;
+  timestamp: number;
+  severity: AnomalySeverity;
+  description: string;
+  frameReference?: string;
+  durationSeconds?: number;
+  detectedBy: string;
+  resolved: boolean;
+  createdAt: string;
+}
+
 export interface SpeechMetrics {
   speechRateWpm: number;
   pauseFrequency: number;
@@ -123,7 +169,34 @@ export interface SpeechMetrics {
   structureSectionsCount: number;
   clarityScore: number;
   fillerBreakdown?: Record<string, number>;
-  pauseEvents?: Array<{ startTime: number; endTime: number; duration: number }>;
+  pauseEvents?: Array<{
+    startTime: number;
+    endTime: number;
+    duration: number;
+    category?: 'NATURAL_CADENCE' | 'THINKING_HESITATION' | 'PROLONGED_SILENCE';
+  }>;
+  pauseMetrics?: {
+    totalPauseCount: number;
+    naturalCadenceCount: number;
+    thinkingHesitationCount: number;
+    prolongedSilenceCount: number;
+  };
+  vocalTone?: {
+    pitchStability: number;
+    pitchStabilityScore?: number;
+    energyDynamics: number;
+    inflectionVariation: number;
+    pacingConsistency: number;
+  };
+  audioTrackMetrics?: {
+    sampleRate: number;
+    channels: number;
+    durationSeconds: number;
+    audioExtractedVia: 'FFMPEG' | 'DIRECT_STREAM_PROBE' | 'SYNTHETIC';
+    extractionSource?: 'FFMPEG_REAL_PCM' | 'SYNTHETIC_ACOUSTIC_PROBE';
+    rmsLevelDb?: number;
+    rmsDbLevel?: number;
+  };
 }
 
 export interface PresentationMetricsEntity {
@@ -148,6 +221,8 @@ export type TimelineEventType =
   | 'CLAIM'
   | 'TECHNICAL_MENTION'
   | 'DEMO'
+  | 'MILESTONE'
+  | 'ANOMALY'
   | 'ERROR'
   | 'RESULT'
   | 'QUESTION'
@@ -205,6 +280,8 @@ export interface MultimodalAnalysisBundle {
   technicalMentions: TechnicalMention[];
   demoObservations: DemoObservation[];
   claimDemoMatches: ClaimDemoMatch[];
+  demoMilestones?: DemoMilestone[];
+  videoAnomalies?: VideoAnomaly[];
   presentationMetrics: PresentationMetricsEntity | null;
   timeline: AnalysisEvent[];
 }

@@ -4,7 +4,7 @@ import type { Claim, ClaimStatus } from '../models/claim';
 export class ClaimRepository {
   static create(claim: Claim): Claim {
     db.run(
-      `INSERT INTO claims (
+      `INSERT OR REPLACE INTO claims (
         id, evaluation_id, claim_text, claim_type, importance, status,
         confidence, project_evidence, external_evidence, explanation, recommended_judge_question, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -26,7 +26,7 @@ export class ClaimRepository {
     if (claim.supportingEvidenceIds && claim.supportingEvidenceIds.length > 0) {
       for (const evId of claim.supportingEvidenceIds) {
         db.run(
-          `INSERT INTO claim_evidence (id, claim_id, evidence_id, relationship) VALUES (?, ?, ?, ?)`,
+          `INSERT OR IGNORE INTO claim_evidence (id, claim_id, evidence_id, relationship) VALUES (?, ?, ?, ?)`,
           `${claim.id}_sup_${evId}`,
           claim.id,
           evId,
@@ -39,7 +39,7 @@ export class ClaimRepository {
     if (claim.contradictingEvidenceIds && claim.contradictingEvidenceIds.length > 0) {
       for (const evId of claim.contradictingEvidenceIds) {
         db.run(
-          `INSERT INTO claim_evidence (id, claim_id, evidence_id, relationship) VALUES (?, ?, ?, ?)`,
+          `INSERT OR IGNORE INTO claim_evidence (id, claim_id, evidence_id, relationship) VALUES (?, ?, ?, ?)`,
           `${claim.id}_con_${evId}`,
           claim.id,
           evId,

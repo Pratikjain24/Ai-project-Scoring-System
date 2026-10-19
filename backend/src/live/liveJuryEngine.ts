@@ -16,8 +16,12 @@ import type {
   LiveScoreSnapshot,
   LiveSessionFinalizationResult,
   LiveDemoStatus,
-  QuestionAnswerStatus
+  QuestionAnswerStatus,
+  LivePresenterTrackingMetrics
 } from '../models/liveJury';
+import { createModuleLogger } from '../utils/logger';
+
+const liveLogger = createModuleLogger('LiveJuryEngine');
 
 export type LiveEventListener = (event: LiveEvent) => void;
 
@@ -25,6 +29,7 @@ export class LiveJuryEngine {
   private static instance: LiveJuryEngine;
   private repository: LiveJuryRepository;
   private listeners: Map<string, Set<LiveEventListener>> = new Map();
+  private latestVisualTelemetry: Map<string, { metrics: LivePresenterTrackingMetrics; count: number }> = new Map();
 
   constructor(repository?: LiveJuryRepository) {
     this.repository = repository || new LiveJuryRepository();
@@ -56,7 +61,7 @@ export class LiveJuryEngine {
         try {
           listener(event);
         } catch (e) {
-          console.error('Error in live event listener:', e);
+          liveLogger.error('Error in live event listener', { sessionId: event.sessionId, error: e });
         }
       });
     }
@@ -421,10 +426,183 @@ export class LiveJuryEngine {
   }
 
   /**
-   * Get Live Indicators & Score Snapshot
+   * Ingest real-time computer vision presenter telemetry (face tracking, gaze, posture, slides)
+   */
+  ingestVisualTelemetry(
+    sessionId: string,
+    telemetry: LivePresenterTrackingMetrics,
+    elapsedSeconds: number = 0
+  ): { event: LiveEvent; snapshot: LiveScoreSnapshot } {
+    const timestampMs = (elapsedSeconds || Math.round((telemetry.timestampMs || Date.now()) / 1000)) * 1000;
+    const timestampFormatted = this.formatTime(Math.round(timestampMs / 1000));
+
+    // Update session elapsed time if greater
+    const session = this.repository.getSession(sessionId);
+    if (session && elapsedSeconds > session.currentElapsedSeconds) {
+      this.repository.updateSession(sessionId, { currentElapsedSeconds: elapsedSeconds });
+    }
+
+    // 1. Check Gaze Warnings
+    if (telemetry.faceDetected && telemetry.eyeContactScore < 40 && telemetry.gazeStatus === 'LOOKING_DOWN') {
+      const gazeEv = this.repository.addEvent({
+        sessionId,
+        timestampMs,
+        timestampFormatted,
+        eventType: 'GAZE_WARNING',
+        description: `Presenter looking down at notes. Direct eye-contact dipped to ${Math.round(telemetry.eyeContactScore)}%.`,
+        confidence: 0.92,
+        evidenceIds: [],
+        metadata: { gazeStatus: telemetry.gazeStatus, eyeContactScore: telemetry.eyeContactScore }
+      });
+      this.emitEvent(gazeEv);
+
+      this.repository.addObservation({
+        sessionId,
+        timestampMs,
+        timestampFormatted,
+        category: 'PRESENTATION',
+        title: 'Eye Contact Warning: Presenter Reading Notes',
+        description: `Presenter gaze directed downward (Pitch: ${telemetry.headPose.pitch.toFixed(1)}°). Eye contact: ${Math.round(telemetry.eyeContactScore)}%.`,
+        severity: 'WARNING',
+        confidence: 0.90
+      });
+    } else if (telemetry.faceDetected && telemetry.gazeStatus === 'LOOKING_AWAY') {
+      const gazeEv = this.repository.addEvent({
+        sessionId,
+        timestampMs,
+        timestampFormatted,
+        eventType: 'GAZE_WARNING',
+        description: `Presenter gaze diverted from audience/jury (Yaw: ${telemetry.headPose.yaw.toFixed(1)}°).`,
+        confidence: 0.88,
+        evidenceIds: [],
+        metadata: { gazeStatus: telemetry.gazeStatus, headPose: telemetry.headPose }
+      });
+      this.emitEvent(gazeEv);
+    }
+
+    // 2. Check Posture Alerts
+    if (telemetry.postureStatus === 'SLUMPED' && telemetry.postureStability < 60) {
+      const postureEv = this.repository.addEvent({
+        sessionId,
+        timestampMs,
+        timestampFormatted,
+        eventType: 'POSTURE_ALERT',
+        description: `Presenter posture slumped; spinal stability score at ${Math.round(telemetry.postureStability)}%.`,
+        confidence: 0.91,
+        evidenceIds: [],
+        metadata: { postureStatus: telemetry.postureStatus, stability: telemetry.postureStability }
+      });
+      this.emitEvent(postureEv);
+
+      this.repository.addObservation({
+        sessionId,
+        timestampMs,
+        timestampFormatted,
+        category: 'PRESENTATION',
+        title: 'Ergonomic Alert: Presenter Slumping',
+        description: `Presentation presence weakened by slumped posture (${Math.round(telemetry.postureStability)}% stability).`,
+        severity: 'WARNING',
+        confidence: 0.89
+      });
+    }
+
+    // 3. Check Slide Transitions & Dwell Times
+    if (telemetry.slideTransitionDetected) {
+      const isRushed = telemetry.slideDwellTimeSeconds > 0 && telemetry.slideDwellTimeSeconds < 15;
+      const isLingering = telemetry.slideDwellTimeSeconds > 180;
+      
+      const slideEv = this.repository.addEvent({
+        sessionId,
+        timestampMs,
+        timestampFormatted,
+        eventType: 'SLIDE_TRANSITION',
+        description: `Slide transitioned to Slide #${telemetry.slideNumber}. Previous slide dwell time: ${telemetry.slideDwellTimeSeconds}s.`,
+        confidence: 0.95,
+        evidenceIds: [],
+        metadata: {
+          slideNumber: telemetry.slideNumber,
+          dwellTimeSeconds: telemetry.slideDwellTimeSeconds,
+          isRushed,
+          isLingering
+        }
+      });
+      this.emitEvent(slideEv);
+
+      if (isRushed && telemetry.slideNumber > 1) {
+        this.repository.addObservation({
+          sessionId,
+          timestampMs,
+          timestampFormatted,
+          category: 'PRESENTATION',
+          title: `Slide #${telemetry.slideNumber - 1} Rushed (<15s)`,
+          description: `Presenter spent only ${telemetry.slideDwellTimeSeconds}s on previous slide before transitioning.`,
+          severity: 'WARNING',
+          confidence: 0.93
+        });
+      } else if (isLingering) {
+        this.repository.addObservation({
+          sessionId,
+          timestampMs,
+          timestampFormatted,
+          category: 'PRESENTATION',
+          title: `Slide #${telemetry.slideNumber - 1} Prolonged (>3m)`,
+          description: `Presenter spent ${telemetry.slideDwellTimeSeconds}s on slide #${telemetry.slideNumber - 1}; consider audience pacing.`,
+          severity: 'INFO',
+          confidence: 0.90
+        });
+      }
+    }
+
+    // 4. Primary Telemetry Event
+    const primaryEvent = this.repository.addEvent({
+      sessionId,
+      timestampMs,
+      timestampFormatted,
+      eventType: 'PRESENTER_CV_TELEMETRY',
+      description: `CV Presenter Tracker: Gaze=${telemetry.gazeStatus} (${Math.round(telemetry.eyeContactScore)}%), Posture=${telemetry.postureStatus}, Slide=#${telemetry.slideNumber}`,
+      confidence: 0.94,
+      evidenceIds: [],
+      metadata: { ...telemetry }
+    });
+    this.emitEvent(primaryEvent);
+
+    // 5. Store latest visual telemetry
+    const current = this.latestVisualTelemetry.get(sessionId) || { metrics: telemetry, count: 0 };
+    this.latestVisualTelemetry.set(sessionId, {
+      metrics: telemetry,
+      count: current.count + 1
+    });
+
+    const snapshot = this.getScoreSnapshot(sessionId);
+    return { event: primaryEvent, snapshot };
+  }
+
+  /**
+   * Get Live Indicators & Score Snapshot (incorporating visual presenter metrics)
    */
   getScoreSnapshot(sessionId: string): LiveScoreSnapshot {
-    return this.repository.getScoreSnapshot(sessionId);
+    const baseSnapshot = this.repository.getScoreSnapshot(sessionId);
+    const stored = this.latestVisualTelemetry.get(sessionId);
+
+    if (stored) {
+      baseSnapshot.visualMetrics = stored.metrics;
+      baseSnapshot.visualTelemetryCount = stored.count;
+
+      // Calibrate presentation coverage with eye contact & posture quality
+      const eyeContactFactor = stored.metrics.eyeContactScore / 100;
+      const postureFactor = stored.metrics.postureStability / 100;
+      const visualQualityMultiplier = (eyeContactFactor * 0.6) + (postureFactor * 0.4);
+
+      // Weighted adjustment to presentation coverage (up to +/- 8%)
+      const adjustment = Math.round((visualQualityMultiplier - 0.7) * 15);
+      baseSnapshot.presentationCoverage = Math.max(0, Math.min(100, baseSnapshot.presentationCoverage + adjustment));
+    }
+
+    return baseSnapshot;
+  }
+
+  getLatestVisualTelemetry(sessionId: string): { metrics: LivePresenterTrackingMetrics; count: number } | undefined {
+    return this.latestVisualTelemetry.get(sessionId);
   }
 
   /**

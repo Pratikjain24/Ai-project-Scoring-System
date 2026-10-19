@@ -1,13 +1,30 @@
 import type { Claim } from '../models/claim';
 import type { Evidence } from '../models/evidence';
+import type { Project } from '../models/project';
+import { EvaluationRepository } from '../repositories/evaluationRepository';
+import { ProjectRepository } from '../repositories/projectRepository';
+import { DomainSynthesisService } from '../services/domainSynthesisService';
 
 export class ClaimExtractionAgent {
   static async extract(
     evaluationId: string,
-    evidenceList: Evidence[]
+    evidenceList: Evidence[],
+    projectParam?: Project
   ): Promise<Claim[]> {
     const now = new Date().toISOString();
     const evidenceIds = evidenceList.map(e => e.id);
+
+    let project = projectParam;
+    if (!project) {
+      const evalRecord = EvaluationRepository.findById(evaluationId);
+      if (evalRecord?.projectId) {
+        project = ProjectRepository.findById(evalRecord.projectId) || undefined;
+      }
+    }
+
+    if (project && project.id !== 'smart-road-vision' && !project.name.toLowerCase().includes('smart road')) {
+      return DomainSynthesisService.synthesizeClaims(evaluationId, project, evidenceList);
+    }
 
     return [
       {

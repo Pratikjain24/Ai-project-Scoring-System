@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { ReportController } from '../controllers/reportController';
+import { authenticate } from '../middleware/auth';
 
 export const reportRouter = Router({ mergeParams: true });
 
@@ -15,5 +16,5 @@ reportRouter.post('/share', ReportController.createShare);
 
 // Global share router: /api/report-share/*
 export const shareRouter = Router();
-shareRouter.delete('/:id', ReportController.revokeShare);
+shareRouter.delete('/:id', authenticate, ReportController.revokeShare);
 shareRouter.get('/:token', ReportController.getShareByToken);

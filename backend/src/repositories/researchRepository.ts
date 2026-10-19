@@ -4,7 +4,7 @@ import type { ResearchSource, ResearchFinding, ResearchSourceType } from '../mod
 export class ResearchRepository {
   static createSource(source: ResearchSource): ResearchSource {
     db.run(
-      `INSERT INTO research_sources (
+      `INSERT OR REPLACE INTO research_sources (
         id, evaluation_id, source_type, title, url, authors_json, publication_date,
         authority_score, relevance_score, directness_score, overall_rank, metadata_json, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -70,7 +70,7 @@ export class ResearchRepository {
 
   static createFinding(finding: ResearchFinding): ResearchFinding {
     db.run(
-      `INSERT INTO research_findings (
+      `INSERT OR REPLACE INTO research_findings (
         id, source_id, evaluation_id, summary, key_claims_matched_json,
         novelty_aspects_json, confidence, evidence_id, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,

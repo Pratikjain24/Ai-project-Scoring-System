@@ -8,16 +8,26 @@ export class ProjectRepository {
       `INSERT INTO projects (
         id, name, architecture_type, category, domain, tagline,
         problem_statement, solution_description, team_name, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        architecture_type = excluded.architecture_type,
+        category = excluded.category,
+        domain = excluded.domain,
+        tagline = COALESCE(excluded.tagline, projects.tagline),
+        problem_statement = excluded.problem_statement,
+        solution_description = excluded.solution_description,
+        team_name = excluded.team_name,
+        updated_at = excluded.updated_at`,
       project.id,
       project.name,
       project.architectureType,
       project.category,
       project.domain,
       project.tagline || null,
-      project.problemStatement,
-      project.solutionDescription,
-      project.teamName,
+      project.problemStatement || '',
+      project.solutionDescription || '',
+      project.teamName || 'Engineering Research Team',
       now,
       now
     );
@@ -25,7 +35,12 @@ export class ProjectRepository {
     if (project.teamMembers && project.teamMembers.length > 0) {
       for (const m of project.teamMembers) {
         db.run(
-          `INSERT INTO team_members (id, project_id, name, role, email, avatar_url) VALUES (?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO team_members (id, project_id, name, role, email, avatar_url) VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             name = excluded.name,
+             role = excluded.role,
+             email = excluded.email,
+             avatar_url = excluded.avatar_url`,
           m.id,
           project.id,
           m.name,
@@ -39,7 +54,11 @@ export class ProjectRepository {
     if (project.links && project.links.length > 0) {
       for (const l of project.links) {
         db.run(
-          `INSERT INTO project_links (id, project_id, type, url, description) VALUES (?, ?, ?, ?, ?)`,
+          `INSERT INTO project_links (id, project_id, type, url, description) VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             type = excluded.type,
+             url = excluded.url,
+             description = excluded.description`,
           l.id,
           project.id,
           l.type,
@@ -53,7 +72,15 @@ export class ProjectRepository {
   }
 
   static findById(id: string): Project | undefined {
-    const row = db.get<any>(`SELECT * FROM projects WHERE id = ?`, id);
+    let row = db.get<any>(`SELECT * FROM projects WHERE id = ?`, id);
+    if (!row) {
+      // Fallback: Check if the provided id is an evaluation id
+      const evalRow = db.get<any>(`SELECT project_id FROM evaluations WHERE id = ?`, id);
+      if (evalRow?.project_id) {
+        row = db.get<any>(`SELECT * FROM projects WHERE id = ?`, evalRow.project_id);
+        id = evalRow.project_id;
+      }
+    }
     if (!row) return undefined;
 
     const teamMembers = db.all<TeamMember>(`SELECT * FROM team_members WHERE project_id = ?`, id);

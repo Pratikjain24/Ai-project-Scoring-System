@@ -1,6 +1,9 @@
 import type { Request, Response } from 'express';
 import { OriginalityPipeline } from '../originality-intelligence/originalityPipeline';
 import { OriginalityIntelligenceRepository } from '../repositories/originalityIntelligenceRepository';
+import { createModuleLogger } from '../utils/logger';
+
+const originalityLogger = createModuleLogger('OriginalityController');
 
 export class OriginalityIntelligenceController {
   static async analyze(req: Request, res: Response): Promise<void> {
@@ -15,7 +18,7 @@ export class OriginalityIntelligenceController {
         data: bundle,
       });
     } catch (error: any) {
-      console.error('[OriginalityController] analyze error:', error);
+      originalityLogger.error('analyze error', { evaluationId: req.params.id, error });
       res.status(500).json({ success: false, error: error.message });
     }
   }
@@ -40,7 +43,7 @@ export class OriginalityIntelligenceController {
         },
       });
     } catch (error: any) {
-      console.error('[OriginalityController] getFullBundle error:', error);
+      originalityLogger.error('getFullBundle error', { evaluationId: req.params.id, error });
       res.status(500).json({ success: false, error: error.message });
     }
   }

@@ -61,6 +61,24 @@ export class LiveJuryController {
     }
   };
 
+  getScore = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const session = this.repo.getSessionByEvaluation(id);
+      if (!session) {
+        const readySession = this.repo.getOrCreateSession(id);
+        const snapshot = this.repo.getScoreSnapshot(readySession.id);
+        res.status(200).json({ success: true, data: snapshot });
+        return;
+      }
+
+      const snapshot = this.engine.getScoreSnapshot(session.id);
+      res.status(200).json({ success: true, data: snapshot });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  };
+
   pauseSession = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
@@ -240,6 +258,31 @@ export class LiveJuryController {
       );
 
       res.status(201).json({ success: true, data: createdNote });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  };
+
+  ingestTelemetry = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { telemetry, elapsedSeconds } = req.body || {};
+      if (!telemetry) {
+        res.status(400).json({ success: false, error: 'Telemetry data is required' });
+        return;
+      }
+
+      const session = this.repo.getOrCreateSession(id);
+      const result = this.engine.ingestVisualTelemetry(session.id, telemetry, elapsedSeconds || 0);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          session: this.repo.getSession(session.id),
+          event: result.event,
+          snapshot: result.snapshot
+        }
+      });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }

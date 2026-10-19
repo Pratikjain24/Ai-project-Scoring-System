@@ -18,6 +18,11 @@ import type {
   DemoObservationResult,
   DemoSupportStatus,
   TimelineEventType,
+  DemoMilestone,
+  MilestoneVerificationStatus,
+  VideoAnomaly,
+  VideoAnomalyType,
+  AnomalySeverity,
 } from '../models/multimodal';
 
 export class MultimodalRepository {
@@ -135,7 +140,7 @@ export class MultimodalRepository {
     const now = new Date().toISOString();
     for (const seg of segments) {
       db.run(
-        `INSERT INTO video_segments (id, video_id, start_time, end_time, segment_type, confidence, created_at)
+        `INSERT OR REPLACE INTO video_segments (id, video_id, start_time, end_time, segment_type, confidence, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         seg.id,
         seg.videoId,
@@ -169,7 +174,7 @@ export class MultimodalRepository {
     const now = new Date().toISOString();
     for (const t of transcripts) {
       db.run(
-        `INSERT INTO transcript_segments (id, video_id, start_time, end_time, text, confidence, speaker_tag, created_at)
+        `INSERT OR REPLACE INTO transcript_segments (id, video_id, start_time, end_time, text, confidence, speaker_tag, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         t.id,
         t.videoId,
@@ -205,7 +210,7 @@ export class MultimodalRepository {
     const now = new Date().toISOString();
     for (const ev of events) {
       db.run(
-        `INSERT INTO visual_events (
+        `INSERT OR REPLACE INTO visual_events (
           id, video_id, timestamp, frame_reference, event_type, description,
           confidence, hardware_confidence, metadata_json, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -247,7 +252,7 @@ export class MultimodalRepository {
     const now = new Date().toISOString();
     for (const m of mentions) {
       db.run(
-        `INSERT INTO technical_mentions (id, video_id, technology, timestamp, source_text, confidence, created_at)
+        `INSERT OR REPLACE INTO technical_mentions (id, video_id, technology, timestamp, source_text, confidence, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         m.id,
         m.videoId,
@@ -292,7 +297,7 @@ export class MultimodalRepository {
       }
 
       db.run(
-        `INSERT INTO demo_observations (
+        `INSERT OR REPLACE INTO demo_observations (
           id, video_id, evaluation_id, feature, timestamp, observed_behavior, result, confidence, evidence_id, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         d.id,
@@ -354,7 +359,7 @@ export class MultimodalRepository {
       if (!evalExists) continue;
 
       db.run(
-        `INSERT INTO claim_demo_matches (
+        `INSERT OR REPLACE INTO claim_demo_matches (
           id, evaluation_id, claim_id, video_id, timestamp, demo_support, confidence, observation_notes, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         m.id,
@@ -412,6 +417,173 @@ export class MultimodalRepository {
       confidence: r.confidence,
       observationNotes: r.observation_notes,
       claimText: r.claim_text || undefined,
+      createdAt: r.created_at,
+    }));
+  }
+
+  // ==========================================
+  // DEMO MILESTONES
+  // ==========================================
+
+  static createDemoMilestones(milestones: Omit<DemoMilestone, 'createdAt'>[]): void {
+    const now = new Date().toISOString();
+    for (const m of milestones) {
+      let validEvidenceId = null;
+      if (m.evidenceId) {
+        const evExists = db.get<any>(`SELECT id FROM evidence WHERE id = ?`, m.evidenceId);
+        if (evExists) validEvidenceId = m.evidenceId;
+      }
+      let validEvalId = null;
+      if (m.evaluationId) {
+        const evalExists = db.get<any>(`SELECT id FROM evaluations WHERE id = ?`, m.evaluationId);
+        if (evalExists) validEvalId = m.evaluationId;
+      }
+      let validClaimId = null;
+      if (m.claimId) {
+        const claimExists = db.get<any>(`SELECT id FROM claims WHERE id = ?`, m.claimId);
+        if (claimExists) validClaimId = m.claimId;
+      }
+
+      db.run(
+        `INSERT OR REPLACE INTO demo_milestones (
+          id, video_id, evaluation_id, milestone_name, timestamp, status,
+          confidence, frame_reference, thumbnail_url, claim_id, evidence_id,
+          verification_notes, details_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        m.id,
+        m.videoId,
+        validEvalId,
+        m.milestoneName,
+        m.timestamp,
+        m.status,
+        m.confidence,
+        m.frameReference || null,
+        m.thumbnailUrl || null,
+        validClaimId,
+        validEvidenceId,
+        m.verificationNotes || null,
+        m.details ? JSON.stringify(m.details) : null,
+        now
+      );
+    }
+  }
+
+  static findDemoMilestonesByVideoId(videoId: string): DemoMilestone[] {
+    const rows = db.all<any>(`SELECT * FROM demo_milestones WHERE video_id = ? ORDER BY timestamp ASC`, videoId);
+    return rows.map((r) => ({
+      id: r.id,
+      videoId: r.video_id,
+      evaluationId: r.evaluation_id || undefined,
+      milestoneName: r.milestone_name,
+      timestamp: r.timestamp,
+      status: r.status as MilestoneVerificationStatus,
+      confidence: r.confidence,
+      frameReference: r.frame_reference || undefined,
+      thumbnailUrl: r.thumbnail_url || undefined,
+      claimId: r.claim_id || undefined,
+      evidenceId: r.evidence_id || undefined,
+      verificationNotes: r.verification_notes || undefined,
+      details: r.details_json ? JSON.parse(r.details_json) : undefined,
+      createdAt: r.created_at,
+    }));
+  }
+
+  static findDemoMilestonesByEvaluationId(evaluationId: string): DemoMilestone[] {
+    const rows = db.all<any>(`SELECT * FROM demo_milestones WHERE evaluation_id = ? ORDER BY timestamp ASC`, evaluationId);
+    return rows.map((r) => ({
+      id: r.id,
+      videoId: r.video_id,
+      evaluationId: r.evaluation_id || undefined,
+      milestoneName: r.milestone_name,
+      timestamp: r.timestamp,
+      status: r.status as MilestoneVerificationStatus,
+      confidence: r.confidence,
+      frameReference: r.frame_reference || undefined,
+      thumbnailUrl: r.thumbnail_url || undefined,
+      claimId: r.claim_id || undefined,
+      evidenceId: r.evidence_id || undefined,
+      verificationNotes: r.verification_notes || undefined,
+      details: r.details_json ? JSON.parse(r.details_json) : undefined,
+      createdAt: r.created_at,
+    }));
+  }
+
+  static updateDemoMilestoneStatus(id: string, status: MilestoneVerificationStatus, confidence: number, notes?: string): void {
+    db.run(
+      `UPDATE demo_milestones SET status = ?, confidence = ?, verification_notes = COALESCE(?, verification_notes) WHERE id = ?`,
+      status,
+      confidence,
+      notes || null,
+      id
+    );
+  }
+
+  // ==========================================
+  // VIDEO ANOMALIES
+  // ==========================================
+
+  static createVideoAnomalies(anomalies: Omit<VideoAnomaly, 'createdAt'>[]): void {
+    const now = new Date().toISOString();
+    for (const a of anomalies) {
+      let validEvalId = null;
+      if (a.evaluationId) {
+        const evalExists = db.get<any>(`SELECT id FROM evaluations WHERE id = ?`, a.evaluationId);
+        if (evalExists) validEvalId = a.evaluationId;
+      }
+
+      db.run(
+        `INSERT OR REPLACE INTO video_anomalies (
+          id, video_id, evaluation_id, anomaly_type, timestamp, severity,
+          description, frame_reference, duration_seconds, detected_by, resolved, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        a.id,
+        a.videoId,
+        validEvalId,
+        a.anomalyType,
+        a.timestamp,
+        a.severity,
+        a.description,
+        a.frameReference || null,
+        a.durationSeconds || 0,
+        a.detectedBy || 'HOST_FFMPEG_STREAM_AUDIT',
+        a.resolved ? 1 : 0,
+        now
+      );
+    }
+  }
+
+  static findVideoAnomaliesByVideoId(videoId: string): VideoAnomaly[] {
+    const rows = db.all<any>(`SELECT * FROM video_anomalies WHERE video_id = ? ORDER BY timestamp ASC`, videoId);
+    return rows.map((r) => ({
+      id: r.id,
+      videoId: r.video_id,
+      evaluationId: r.evaluation_id || undefined,
+      anomalyType: r.anomaly_type as VideoAnomalyType,
+      timestamp: r.timestamp,
+      severity: r.severity as AnomalySeverity,
+      description: r.description,
+      frameReference: r.frame_reference || undefined,
+      durationSeconds: r.duration_seconds,
+      detectedBy: r.detected_by,
+      resolved: Boolean(r.resolved),
+      createdAt: r.created_at,
+    }));
+  }
+
+  static findVideoAnomaliesByEvaluationId(evaluationId: string): VideoAnomaly[] {
+    const rows = db.all<any>(`SELECT * FROM video_anomalies WHERE evaluation_id = ? ORDER BY timestamp ASC`, evaluationId);
+    return rows.map((r) => ({
+      id: r.id,
+      videoId: r.video_id,
+      evaluationId: r.evaluation_id || undefined,
+      anomalyType: r.anomaly_type as VideoAnomalyType,
+      timestamp: r.timestamp,
+      severity: r.severity as AnomalySeverity,
+      description: r.description,
+      frameReference: r.frame_reference || undefined,
+      durationSeconds: r.duration_seconds,
+      detectedBy: r.detected_by,
+      resolved: Boolean(r.resolved),
       createdAt: r.created_at,
     }));
   }
@@ -490,7 +662,7 @@ export class MultimodalRepository {
       }
 
       db.run(
-        `INSERT INTO analysis_events (
+        `INSERT OR REPLACE INTO analysis_events (
           id, evaluation_id, video_id, timestamp, event_type, description, confidence, evidence_ids_json, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         ev.id,
@@ -552,6 +724,8 @@ export class MultimodalRepository {
       technicalMentions: this.findTechnicalMentionsByVideoId(videoId),
       demoObservations: this.findDemoObservationsByVideoId(videoId),
       claimDemoMatches: this.findClaimDemoMatchesByVideoId(videoId),
+      demoMilestones: this.findDemoMilestonesByVideoId(videoId),
+      videoAnomalies: this.findVideoAnomaliesByVideoId(videoId),
       presentationMetrics: this.findPresentationMetricsByVideoId(videoId),
       timeline: this.findAnalysisEventsByVideoId(videoId),
     };

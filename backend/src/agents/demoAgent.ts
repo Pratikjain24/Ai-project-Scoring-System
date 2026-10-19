@@ -1,12 +1,30 @@
 import type { DemoAnalysis, DemoFeatureAudit } from '../models/presentation';
 import type { Evidence } from '../models/evidence';
+import type { Project } from '../models/project';
+import { EvaluationRepository } from '../repositories/evaluationRepository';
+import { ProjectRepository } from '../repositories/projectRepository';
+import { DomainSynthesisService } from '../services/domainSynthesisService';
 
 export class DemoAgent {
   static async evaluate(
     evaluationId: string,
-    evidenceList: Evidence[]
+    evidenceList: Evidence[],
+    projectParam?: Project
   ): Promise<DemoAnalysis> {
     const evidenceIds = evidenceList.map(e => e.id);
+
+    let project = projectParam;
+    if (!project) {
+      const evalRecord = EvaluationRepository.findById(evaluationId);
+      if (evalRecord?.projectId) {
+        project = ProjectRepository.findById(evalRecord.projectId) || undefined;
+      }
+    }
+
+    if (project && project.id !== 'smart-road-vision' && !project.name.toLowerCase().includes('smart road')) {
+      const res = DomainSynthesisService.synthesizePresentationAndDemo(evaluationId, project, evidenceList);
+      return res.demo;
+    }
 
     const featuresAudited: DemoFeatureAudit[] = [
       {

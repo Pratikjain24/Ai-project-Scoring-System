@@ -13,6 +13,7 @@ import { IntegrationRepository } from '../repositories/integrationRepository';
 import { EvaluationStateMachine } from './evaluationStateMachine';
 import { MasterScoringEngine } from '../scoring/masterScoringEngine';
 import { JuryRepository } from '../repositories/juryRepository';
+import { JuryDeliberationAgent } from '../agents/juryDeliberationAgent';
 
 // Downstream pipeline engines
 import { DocumentPipeline } from '../document-intelligence/documentPipeline';
@@ -25,6 +26,9 @@ import { AssessmentAggregator } from '../specialist-evaluators/assessmentAggrega
 import { ScoringEngine } from '../scoring/scoringEngine';
 import { ReportEngine } from '../report/reportEngine';
 import type { EvaluationState, EvaluationCheckpoint } from '../models/integration';
+import { createModuleLogger } from '../utils/logger';
+
+const orchestratorLogger = createModuleLogger('EvaluationOrchestrator');
 
 export interface OrchestratorProgress {
   evaluationId: string;
@@ -85,7 +89,7 @@ export class EvaluationOrchestrator {
           await DocumentPipeline.processDocuments(evaluationId);
         } catch (err: any) {
           // Partial analysis tolerance: If no documents or parser error, proceed gracefully
-          console.warn(`[Orchestrator] Document ingestion fallback: ${err?.message || err}`);
+          orchestratorLogger.warn(`Document ingestion fallback: ${err?.message || err}`, { evaluationId, error: err });
         }
 
         const docHash = this.computeHash(`doc_${evaluationId}_${Date.now()}`);
@@ -103,7 +107,7 @@ export class EvaluationOrchestrator {
           const dna = await ProjectUnderstandingAgent.analyze(evaluationId, project, evidenceList);
           AssessmentRepository.saveProjectDNA(dna);
         } catch (err: any) {
-          console.warn(`[Orchestrator] Project DNA analysis fallback: ${err?.message || err}`);
+          orchestratorLogger.warn(`Project DNA analysis fallback: ${err?.message || err}`, { evaluationId, error: err });
         }
 
         const dnaHash = this.computeHash(`dna_${evaluationId}`);
@@ -121,7 +125,7 @@ export class EvaluationOrchestrator {
             await MultimodalPipeline.processEvaluationVideos(evaluationId);
           } catch (err: any) {
             // Partial analysis tolerance: If no video is present, log and continue
-            console.warn(`[Orchestrator] Media analysis fallback: ${err?.message || err}`);
+            orchestratorLogger.warn(`Media analysis fallback: ${err?.message || err}`, { evaluationId, error: err });
           }
         }
 
@@ -140,7 +144,7 @@ export class EvaluationOrchestrator {
             await ResearchPipeline.run(evaluationId, project.name, project.domain || 'Technology');
           } catch (err: any) {
             // Degraded mode tolerance: preserve existing research memory if available
-            console.warn(`[Orchestrator] Research provider degraded fallback: ${err?.message || err}`);
+            orchestratorLogger.warn(`Research provider degraded fallback: ${err?.message || err}`, { evaluationId, error: err });
           }
         }
 
@@ -160,7 +164,7 @@ export class EvaluationOrchestrator {
           const orig = await OriginalityAgent.evaluate(evaluationId, sources, evidenceList);
           AssessmentRepository.saveOriginalityAssessment(orig);
         } catch (err: any) {
-          console.warn(`[Orchestrator] Originality analysis fallback: ${err?.message || err}`);
+          orchestratorLogger.warn(`Originality analysis fallback: ${err?.message || err}`, { evaluationId, error: err });
         }
 
         const origHash = this.computeHash(`orig_${evaluationId}`);
@@ -179,7 +183,7 @@ export class EvaluationOrchestrator {
           const evidenceList = EvidenceRepository.findByEvaluationId(evaluationId);
           await ClaimVerificationAgent.verifyClaims(claims, findings, evidenceList);
         } catch (err: any) {
-          console.warn(`[Orchestrator] Claim verification fallback: ${err?.message || err}`);
+          orchestratorLogger.warn(`Claim verification fallback: ${err?.message || err}`, { evaluationId, error: err });
         }
 
         const claimsHash = this.computeHash(`claims_${evaluationId}`);
@@ -196,7 +200,7 @@ export class EvaluationOrchestrator {
           const { SpecialistEvaluationController } = await import('../controllers/specialistEvaluationController');
           await SpecialistEvaluationController.buildContextAndAnalyze(evaluationId);
         } catch (err: any) {
-          console.warn(`[Orchestrator] Specialist evaluations fallback: ${err?.message || err}`);
+          orchestratorLogger.warn(`Specialist evaluations fallback: ${err?.message || err}`, { evaluationId, error: err });
         }
 
         const evalHash = this.computeHash(`eval_${evaluationId}`);
@@ -226,9 +230,14 @@ export class EvaluationOrchestrator {
       if (this.shouldExecuteStage(stateRecord.currentState, 'JURY_REVIEW')) {
         EvaluationStateMachine.transition(evaluationId, 'JURY_REVIEW');
 
-        // AI Jury consensus ratified directly with Master Score
+        try {
+          await JuryDeliberationAgent.deliberate(evaluationId);
+        } catch (err: any) {
+          orchestratorLogger.warn(`AI Jury Deliberation debate fallback: ${err?.message || err}`, { evaluationId, error: err });
+        }
+
         const juryHash = this.computeHash(`jury_${evaluationId}`);
-        IntegrationRepository.saveCheckpoint(evaluationId, 'JURY_COMPLETE', 'AI Jury Deliberation & Verdict', juryHash);
+        IntegrationRepository.saveCheckpoint(evaluationId, 'JURY_COMPLETE', 'AI Jury Multi-Turn Deliberation & Verdict', juryHash);
       }
 
       // ----------------------------------------------------
@@ -252,7 +261,7 @@ export class EvaluationOrchestrator {
 
       return this.getProgress(evaluationId);
     } catch (err: any) {
-      console.error(`[Orchestrator] Pipeline failure on ${evaluationId}:`, err);
+      orchestratorLogger.error(`Pipeline failure on ${evaluationId}`, { evaluationId, error: err });
       EvaluationStateMachine.fail(evaluationId, 'ORCHESTRATOR', err?.message || 'Unknown pipeline execution failure');
       return this.getProgress(evaluationId);
     }

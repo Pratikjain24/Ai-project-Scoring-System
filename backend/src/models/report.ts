@@ -325,6 +325,17 @@ export interface ReportSections {
   };
 }
 
+export interface ReportSectionItem {
+  sectionIndex: number; // 0 to 19 (1-indexed: 1 to 20)
+  key: string;
+  title: string;
+  category: string;
+  status: 'GENERATED' | 'FALLBACK_GENERATED' | 'DEGRADED';
+  data: any;
+  error?: string;
+  renderType: string;
+}
+
 export interface EvaluationReport {
   id: string;
   evaluationId: string;
@@ -345,7 +356,10 @@ export interface EvaluationReport {
   qualityCheck: ReportQualityCheck;
   consistencyCheck: ReportConsistencyCheck;
   sections: ReportSections;
+  sectionsArray?: ReportSectionItem[]; // Guaranteed exactly 20 canonical sections
+  generationErrors?: string[];
 }
+
 
 export interface ReportShare {
   id: string;

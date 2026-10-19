@@ -7,7 +7,6 @@ export class ProjectController {
     try {
       const id = req.body.id || req.body.slug || `proj_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       const project = ProjectRepository.create({
-        id,
         name: req.body.name || req.body.title || 'Untitled Project',
         architectureType: req.body.architectureType || req.body.type || 'SOFTWARE',
         category: req.body.category || 'AI / Software',

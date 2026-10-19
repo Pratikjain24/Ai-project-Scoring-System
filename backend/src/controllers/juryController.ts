@@ -1,7 +1,12 @@
 import type { Request, Response } from 'express';
 import { MasterScoringEngine } from '../scoring/masterScoringEngine';
 import { JuryRepository } from '../repositories/juryRepository';
+import { IntegrationRepository } from '../repositories/integrationRepository';
+import { JuryDeliberationAgent } from '../agents/juryDeliberationAgent';
 import { db } from '../db/database';
+import { createModuleLogger } from '../utils/logger';
+
+const juryLogger = createModuleLogger('JuryController');
 
 export class JuryController {
   /**
@@ -40,7 +45,7 @@ export class JuryController {
         data: decision,
       });
     } catch (err: any) {
-      console.error('[JuryController] calculateScore error:', err);
+      juryLogger.error('calculateScore error', { evaluationId: req.params.id, error: err });
       res.status(500).json({
         success: false,
         error: { code: 'CALCULATION_ERROR', message: err.message },
@@ -218,7 +223,7 @@ export class JuryController {
         },
       });
     } catch (err: any) {
-      console.error('[JuryController] getJury error:', err);
+      juryLogger.error('getJury error', { evaluationId: req.params.id, error: err });
       res.status(500).json({ success: false, error: { message: err.message } });
     }
   }
@@ -270,6 +275,10 @@ export class JuryController {
       res.status(500).json({ success: false, error: { message: err.message } });
     }
   }
+
+
+
+
 
   /**
    * GET /api/evaluations/:id/jury/questions
@@ -480,7 +489,79 @@ export class JuryController {
       };
 
       JuryRepository.saveHumanReview(review);
-      res.status(201).json({ success: true, data: review });
+
+      // Find matching category in master_category_scores
+      const categoryKey = category.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const catRow = db.get<any>(
+        `SELECT * FROM master_category_scores WHERE evaluation_id = ? AND (category_key = ? OR LOWER(category_label) LIKE ?)`,
+        id,
+        categoryKey,
+        `%${category.toLowerCase()}%`
+      );
+
+      let newOverallScore: number | undefined;
+      if (catRow) {
+        const weight = catRow.weight || 15;
+        const newWeightedScore = Number(((Number(reviewedScore) * weight) / 100).toFixed(2));
+        db.run(
+          `UPDATE master_category_scores 
+           SET raw_score = ?, weighted_score = ?, status = 'REVIEWED', why_this_score = ?
+           WHERE id = ?`,
+          Number(reviewedScore),
+          newWeightedScore,
+          `Human calibrated by ${reviewer}: ${reason}`,
+          catRow.id
+        );
+
+        // Recalculate overall score
+        const sumRow = db.get<any>(
+          `SELECT SUM(weighted_score) as total FROM master_category_scores WHERE evaluation_id = ?`,
+          id
+        );
+        if (sumRow && sumRow.total !== null) {
+          newOverallScore = Number(Number(sumRow.total).toFixed(1));
+          db.run(`UPDATE evaluations SET overall_score = ?, updated_at = ? WHERE id = ?`, newOverallScore, new Date().toISOString(), id);
+          db.run(`UPDATE jury_decisions SET overall_score = ? WHERE evaluation_id = ?`, newOverallScore, id);
+        }
+      }
+
+      // Record in immutable audit log
+      IntegrationRepository.logAudit(
+        'SCORE_OVERRIDE',
+        'evaluation',
+        id,
+        reviewer,
+        req.auth?.role || 'JUROR',
+        {
+          category,
+          originalScore: Number(originalScore),
+          reviewedScore: Number(reviewedScore),
+          newOverallScore,
+          reason,
+        }
+      );
+
+      res.status(201).json({ 
+        success: true, 
+        data: {
+          review,
+          newOverallScore,
+          category,
+        } 
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: { message: err.message } });
+    }
+  }
+
+  /**
+   * GET /api/evaluations/:id/audit-trail
+   */
+  static async getAuditTrail(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const logs = IntegrationRepository.getAuditLogs(50, id);
+      res.status(200).json({ success: true, data: logs });
     } catch (err: any) {
       res.status(500).json({ success: false, error: { message: err.message } });
     }
@@ -577,4 +658,52 @@ export class JuryController {
       res.status(500).json({ success: false, error: { message: err.message } });
     }
   }
+
+  /**
+   * GET /api/evaluations/:id/jury/deliberation
+   * Returns current AI Jury 3-turn multi-persona deliberation debate record
+   */
+  static async getDeliberation(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      let record = JuryDeliberationAgent.getDeliberation(id);
+      if (!record) {
+        record = await JuryDeliberationAgent.deliberate(id);
+      }
+      res.status(200).json({
+        success: true,
+        data: record,
+      });
+    } catch (err: any) {
+      juryLogger.error('getDeliberation error', { evaluationId: req.params.id, error: err });
+      res.status(500).json({
+        success: false,
+        error: { code: 'DELIBERATION_FETCH_ERROR', message: err.message },
+      });
+    }
+  }
+
+  /**
+   * POST /api/evaluations/:id/jury/deliberate
+   * Runs or re-executes AI Jury 3-turn multi-persona deliberation debate
+   */
+  static async runDeliberation(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { maxRounds, targetConsensusScore } = req.body || {};
+      const record = await JuryDeliberationAgent.deliberate(id, { maxRounds, targetConsensusScore });
+      res.status(200).json({
+        success: true,
+        message: 'AI Jury Deliberation debate concluded and consensus ratified.',
+        data: record,
+      });
+    } catch (err: any) {
+      juryLogger.error('runDeliberation error', { evaluationId: req.params.id, error: err });
+      res.status(500).json({
+        success: false,
+        error: { code: 'DELIBERATION_EXECUTION_ERROR', message: err.message },
+      });
+    }
+  }
 }
+

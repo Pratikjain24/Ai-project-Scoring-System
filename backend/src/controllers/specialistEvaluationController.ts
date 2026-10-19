@@ -7,6 +7,9 @@ import { ResearchRepository } from '../repositories/researchRepository';
 import { MultimodalRepository } from '../repositories/multimodalRepository';
 import { DocumentRepository } from '../repositories/documentRepository';
 import type { SpecialistEvaluationContext } from '../specialist-evaluators/types';
+import { createModuleLogger } from '../utils/logger';
+
+const specialistLogger = createModuleLogger('SpecialistEvaluationController');
 
 export class SpecialistEvaluationController {
   /**
@@ -35,6 +38,8 @@ export class SpecialistEvaluationController {
       projectDescription: projRow?.problem_statement || '',
       projectType: projRow?.architecture_type?.toUpperCase() === 'HARDWARE'
         ? 'HARDWARE'
+        : projRow?.architecture_type?.toUpperCase() === 'BIOMEDICAL'
+        ? 'BIOMEDICAL'
         : projRow?.architecture_type?.toUpperCase() === 'SOFTWARE'
         ? 'SOFTWARE'
         : 'HYBRID',
@@ -72,7 +77,7 @@ export class SpecialistEvaluationController {
         },
       });
     } catch (error: any) {
-      console.error('[SpecialistController] analyzeTechnical error:', error);
+      specialistLogger.error('analyzeTechnical error', { evaluationId: req.params.id, error });
       res.status(500).json({ success: false, error: error.message });
     }
   }

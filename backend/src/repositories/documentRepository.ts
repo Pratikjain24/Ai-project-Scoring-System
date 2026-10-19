@@ -59,6 +59,10 @@ export class DocumentRepository {
     };
   }
 
+  static findByEvaluationId(evaluationId: string): Document[] {
+    return this.findDocumentsByEvaluationId(evaluationId);
+  }
+
   static findDocumentsByEvaluationId(evaluationId: string): Document[] {
     const rows = db.all<any>(`SELECT * FROM documents WHERE evaluation_id = ? ORDER BY created_at ASC`, evaluationId);
     return rows.map(row => ({
@@ -109,12 +113,23 @@ export class DocumentRepository {
     );
   }
 
+  static updateDocumentPageCountAndMetadata(id: string, pageCount: number, metadata?: Record<string, any>): void {
+    const now = new Date().toISOString();
+    db.run(
+      `UPDATE documents SET page_count = ?, metadata_json = COALESCE(?, metadata_json), updated_at = ? WHERE id = ?`,
+      pageCount,
+      metadata ? JSON.stringify(metadata) : null,
+      now,
+      id
+    );
+  }
+
   // --- Pages / Slides ---
 
   static createPage(page: Omit<DocumentPage, 'createdAt'>): DocumentPage {
     const now = new Date().toISOString();
     db.run(
-      `INSERT INTO document_pages (id, document_id, page_number, title, text, detected_topics_json, confidence, created_at)
+      `INSERT OR REPLACE INTO document_pages (id, document_id, page_number, title, text, detected_topics_json, confidence, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       page.id,
       page.documentId,
@@ -147,7 +162,7 @@ export class DocumentRepository {
   static createImage(img: Omit<DocumentImage, 'createdAt'>): DocumentImage {
     const now = new Date().toISOString();
     db.run(
-      `INSERT INTO document_images (id, document_id, page_id, page_number, type, caption, identification_state, details_json, confidence, created_at)
+      `INSERT OR REPLACE INTO document_images (id, document_id, page_id, page_number, type, caption, identification_state, details_json, confidence, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       img.id,
       img.documentId,
@@ -184,7 +199,7 @@ export class DocumentRepository {
   static createTable(tbl: Omit<DocumentTable, 'createdAt'>): DocumentTable {
     const now = new Date().toISOString();
     db.run(
-      `INSERT INTO document_tables (id, document_id, page_id, page_number, caption, headers_json, rows_json, confidence, created_at)
+      `INSERT OR REPLACE INTO document_tables (id, document_id, page_id, page_number, caption, headers_json, rows_json, confidence, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       tbl.id,
       tbl.documentId,

@@ -1,60 +1,53 @@
-import type { OriginalityAssessment, SimilarityResult } from '../models/assessments';
+// ====================================================
+// PROJECTX-RAY AI - ORIGINALITY & NOVELTY AGENT
+// Upgraded to Phase 15: Dense 384-dim all-MiniLM-L6-v2 Semantic Embeddings
+// ====================================================
+
+import type { OriginalityAssessment } from '../models/assessments';
 import type { ResearchSource } from '../models/research';
 import type { Evidence } from '../models/evidence';
+import type { Project } from '../models/project';
+import { EvaluationRepository } from '../repositories/evaluationRepository';
+import { ProjectRepository } from '../repositories/projectRepository';
+import { SemanticOriginalityEngine } from '../originality-intelligence/semanticOriginalityEngine';
 
 export class OriginalityAgent {
+  /**
+   * Conducts deep multi-dimensional semantic similarity and originality analysis
+   * using 384-dimensional dense semantic embeddings (all-MiniLM-L6-v2).
+   */
   static async evaluate(
     evaluationId: string,
     sources: ResearchSource[],
-    evidenceList: Evidence[]
+    evidenceList: Evidence[],
+    projectParam?: Project
   ): Promise<OriginalityAssessment> {
-    const evidenceIds = evidenceList.map(e => e.id);
+    let project = projectParam;
+    if (!project) {
+      const evalRecord = EvaluationRepository.findById(evaluationId);
+      if (evalRecord?.projectId) {
+        project = ProjectRepository.findById(evalRecord.projectId) || undefined;
+      }
+    }
 
-    const similarities: SimilarityResult[] = sources.map((s, idx) => ({
-      id: `sim_${evaluationId}_${idx}`,
-      evaluationId,
-      sourceType: s.sourceType,
-      sourceTitle: s.title,
-      sourceUrl: s.url,
-      similarityScore: idx === 0 ? 32 : idx === 1 ? 28 : 19,
-      matchingFeatures: [
-        'Convolutional neural network for asphalt defect bounding box generation',
-        'Use of transfer learning on publicly available road surface datasets'
-      ],
-      differences: [
-        'Hardware-accelerated INT8 quantization pipeline on NVIDIA Jetson Orin',
-        'Transit fleet fleet-wide GPS trajectory smoothing and distributed GeoJSON synchronization'
-      ],
-      evidenceIds: evidenceIds.slice(0, 2),
-    }));
-
-    // Composite similarity calculation (capped reasonably)
-    const maxSimilarity = similarities.length > 0 ? Math.max(...similarities.map(s => s.similarityScore)) : 20;
-    const originalityScore = 100 - maxSimilarity; // e.g. 100 - 32 = 68
-    const confidence = 74;
-
-    let classification: OriginalityAssessment['classification'] = 'INSPIRED';
-    if (originalityScore >= 85) classification = 'ORIGINAL';
-    else if (originalityScore >= 70) classification = 'INSPIRED';
-    else if (originalityScore >= 55) classification = 'MODERATELY_SIMILAR';
-    else if (originalityScore >= 40) classification = 'HIGHLY_SIMILAR';
-    else classification = 'POTENTIAL_REPLICATION';
-
-    return {
-      id: `orig_${evaluationId}`,
-      evaluationId,
-      originalityScore,
-      similarityScore: maxSimilarity,
-      confidence,
-      classification,
-      similarities,
-      keyDifferences: [
-        'Proprietary INT8 calibration cache optimized for 54 FPS automotive deployment.',
-        'Real-time municipal work-order dispatch pipeline integrated with transit dispatch API.',
-        'Sub-meter spatial clustering algorithm consolidating duplicate detections across multiple bus passes.'
-      ],
-      evidenceIds: evidenceIds.slice(0, 5),
-      createdAt: new Date().toISOString(),
+    const resolvedProject: Project = project || {
+      id: 'proj_default',
+      name: 'Academic Software System',
+      architectureType: 'SOFTWARE',
+      category: 'Software Engineering',
+      domain: 'Computer Science',
+      problemStatement: 'Automated evaluation and algorithmic analysis',
+      solutionDescription: 'Modular pipeline architecture',
+      teamName: 'Innovators',
     };
+
+    return SemanticOriginalityEngine.evaluate(evaluationId, resolvedProject, sources, evidenceList);
+  }
+
+  /**
+   * Status and diagnostic report of semantic embedding model and catalog
+   */
+  static getStatus() {
+    return SemanticOriginalityEngine.getStatus();
   }
 }

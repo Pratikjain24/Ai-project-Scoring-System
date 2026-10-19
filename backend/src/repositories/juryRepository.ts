@@ -156,7 +156,13 @@ export class JuryRepository {
   }
 
   static getJuryDecision(evaluationId: string): JuryDecision | undefined {
-    const row = db.get<any>(`SELECT * FROM jury_decisions WHERE evaluation_id = ?`, evaluationId);
+    let row = db.get<any>(`SELECT * FROM jury_decisions WHERE evaluation_id = ?`, evaluationId);
+    if (!row) {
+      const evalRow = db.get<any>(`SELECT id FROM evaluations WHERE project_id = ? OR id = ? OR id = ? LIMIT 1`, evaluationId, evaluationId, `eval_${evaluationId}`);
+      if (evalRow) {
+        row = db.get<any>(`SELECT * FROM jury_decisions WHERE evaluation_id = ?`, evalRow.id);
+      }
+    }
     if (!row) return undefined;
     return {
       id: row.id,
@@ -223,7 +229,13 @@ export class JuryRepository {
   }
 
   static getCategoryScores(evaluationId: string): MasterCategoryScore[] {
-    const rows = db.all<any>(`SELECT * FROM master_category_scores WHERE evaluation_id = ?`, evaluationId);
+    let rows = db.all<any>(`SELECT * FROM master_category_scores WHERE evaluation_id = ?`, evaluationId);
+    if (!rows || rows.length === 0) {
+      const evalRow = db.get<any>(`SELECT id FROM evaluations WHERE project_id = ? OR id = ? OR id = ? LIMIT 1`, evaluationId, evaluationId, `eval_${evaluationId}`);
+      if (evalRow) {
+        rows = db.all<any>(`SELECT * FROM master_category_scores WHERE evaluation_id = ?`, evalRow.id);
+      }
+    }
     return rows.map(r => ({
       id: r.id,
       evaluationId: r.evaluation_id,

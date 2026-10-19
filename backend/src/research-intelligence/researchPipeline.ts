@@ -30,6 +30,9 @@ import { researchIntelligenceRepo } from '../repositories/researchIntelligenceRe
 import { EvaluationRepository } from '../repositories/evaluationRepository.js';
 import { ProjectRepository } from '../repositories/projectRepository.js';
 import { AssessmentRepository } from '../repositories/assessmentRepository.js';
+import { createModuleLogger } from '../utils/logger.js';
+
+const researchLogger = createModuleLogger('ResearchPipeline');
 
 export class ResearchPipeline {
   private planner: ResearchPlanner;
@@ -67,7 +70,7 @@ export class ResearchPipeline {
     // 1. Check Research Memory Cache first
     const cached = researchIntelligenceRepo.getCachedResearch(evaluationId, 'complete_bundle');
     if (cached) {
-      console.log(`[ResearchPipeline] Serving research from cache for evaluation: ${evaluationId}`);
+      researchLogger.info(`Serving research from cache for evaluation: ${evaluationId}`, { evaluationId });
       return cached;
     }
 
@@ -329,7 +332,7 @@ export class ResearchPipeline {
       // Cache with 30-minute TTL
       researchIntelligenceRepo.setCachedResearch(evaluationId, 'complete_bundle', bundle, 1800);
     } catch (err) {
-      console.error('[ResearchPipeline] Persistence warning:', err);
+      researchLogger.error('Persistence warning', { evaluationId, error: err });
     }
 
     return bundle;

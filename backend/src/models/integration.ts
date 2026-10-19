@@ -55,7 +55,15 @@ export interface EvaluationCheckpointRecord {
   createdAt: string;
 }
 
-export type UserRole = 'USER' | 'REVIEWER' | 'ADMIN';
+export type UserRole = 
+  | 'USER' 
+  | 'STUDENT' 
+  | 'PROJECT_OWNER' 
+  | 'EVALUATOR' 
+  | 'JUROR' 
+  | 'REVIEWER' 
+  | 'LEAD_REVIEWER' 
+  | 'ADMIN';
 
 export interface AuthContext {
   userId: string;

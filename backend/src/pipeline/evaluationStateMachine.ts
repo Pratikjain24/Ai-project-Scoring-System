@@ -3,6 +3,7 @@
 // ====================================================
 
 import { IntegrationRepository } from '../repositories/integrationRepository';
+import { pipelineStreamEmitter } from './orchestrationService';
 import type { EvaluationState, EvaluationStateRecord, EvaluationCheckpoint } from '../models/integration';
 
 export class InvalidStateTransitionError extends Error {
@@ -116,6 +117,19 @@ export class EvaluationStateMachine {
       }
     );
 
+    // Emit real-time state change via SSE stream
+    try {
+      pipelineStreamEmitter.emit('progress', {
+        evaluationId,
+        currentState: targetState,
+        state: targetState === 'FAILED' ? 'FAILED' : (targetState === 'FINAL' || targetState === 'READY_FOR_REVIEW' ? 'COMPLETED' : 'PROCESSING'),
+        message: reason || `Transitioned to ${targetState}`,
+        timestamp: new Date().toISOString()
+      });
+    } catch {
+      // Non-blocking emitter
+    }
+
     return updated!;
   }
 
@@ -145,6 +159,21 @@ export class EvaluationStateMachine {
       'SYSTEM',
       { errorStage, errorMessage }
     );
+
+    // Emit real-time failure via SSE stream
+    try {
+      pipelineStreamEmitter.emit('progress', {
+        evaluationId,
+        currentState: 'FAILED',
+        state: 'FAILED',
+        errorStage,
+        errorMessage,
+        message: `Evaluation failed at stage ${errorStage}: ${errorMessage}`,
+        timestamp: new Date().toISOString()
+      });
+    } catch {
+      // Non-blocking emitter
+    }
 
     return updated!;
   }

@@ -78,4 +78,32 @@ export class EvidenceController {
       next(err);
     }
   }
+
+  static resolveClaim(req: Request, res: Response, next: NextFunction): void {
+    try {
+      const resolution = EvidenceGraphService.resolveClaimDependencies(
+        req.params.evaluationId,
+        req.params.claimId
+      );
+      res.json({
+        success: true,
+        data: resolution,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static auditGraph(req: Request, res: Response, next: NextFunction): void {
+    try {
+      const audit = EvidenceGraphService.auditEntireEvidenceGraph(req.params.evaluationId);
+      res.json({
+        success: true,
+        data: audit,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
 }
+

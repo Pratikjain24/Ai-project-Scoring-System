@@ -1,9 +1,10 @@
 import { MultimodalRepository } from '../repositories/multimodalRepository';
 import { VideoProcessor } from './videoProcessor';
 import { AudioProcessor } from './audioProcessor';
-import { MockTranscriptionProvider } from './transcriptionProvider';
+import { MockTranscriptionProvider, ResilientTranscriptionRouter } from './transcriptionProvider';
 import { VisualObservationService } from './visualObservationService';
 import { ClaimDemoMatcher } from './claimDemoMatcher';
+import { MultimodalMemoryGuard } from './multimodalMemoryGuard';
 import type {
   VideoEntity,
   AnalysisEvent,
@@ -14,10 +15,34 @@ import type {
 export interface MultimodalJobOptions {
   sampleIntervalSeconds?: number;
   mockMode?: boolean;
+  whisperProvider?: string;
   failAtStep?: string; // for testing failure handling
 }
 
 export class MultimodalPipeline {
+  /**
+   * Scenario 7 Mitigation: Process all evaluation videos with sequential memory isolation
+   * and buffer clearing between videos to prevent OOM termination.
+   */
+  static async processEvaluationVideos(
+    evaluationId: string,
+    options: MultimodalJobOptions = {}
+  ): Promise<MultimodalAnalysisBundle[]> {
+    const videos = MultimodalRepository.findVideosByEvaluationId(evaluationId);
+    if (!videos || videos.length === 0) {
+      return [];
+    }
+
+    const bundles: MultimodalAnalysisBundle[] = [];
+    for (const v of videos) {
+      // Memory barrier: sweep intermediate heap before processing next media artifact
+      await MultimodalMemoryGuard.performSequentialMemoryReclaim();
+      const bundle = await this.processVideo(v.id, options);
+      bundles.push(bundle);
+    }
+    return bundles;
+  }
+
   /**
    * Executes the multimodal analysis pipeline for a given video
    */
@@ -30,11 +55,15 @@ export class MultimodalPipeline {
       throw new Error(`Video not found: ${videoId}`);
     }
 
+    // Health check memory before launching heavy pipelines
+    MultimodalMemoryGuard.checkMemoryHealth();
+
     const evaluationId = video.evaluationId || 'EVAL-MOCK-1';
     MultimodalRepository.updateVideoStatus(videoId, 'PROCESSING');
 
     try {
       // 1. VIDEO_METADATA & FRAME_EXTRACTION
+
       if (options.failAtStep === 'VIDEO_METADATA') {
         throw new Error('Simulated failure during VIDEO_METADATA extraction');
       }
@@ -43,6 +72,31 @@ export class MultimodalPipeline {
         options.sampleIntervalSeconds || 5,
         video.durationSeconds || 600
       );
+      // Extract downsampled keyframes (180 frames -> 5 frames, 360MB -> 225KB)
+      const keyframesResult = await MultimodalMemoryGuard.extractKeyframes({
+        videoPath: video.fileReference,
+        durationSeconds: metadata.durationSeconds,
+        featureTimestamps: [45, 110, 215, 365],
+      });
+
+      (metadata as any).keyframes = keyframesResult.keyframes.map((k) => ({
+        frameId: k.frameId,
+        timestamp: k.timestamp,
+        byteSize: k.byteSize,
+        engine: k.engine,
+        width: k.width,
+        height: k.height,
+        base64DataUrl: k.base64DataUrl,
+      }));
+      (metadata as any).keyframeMemorySavings = {
+        unoptimizedCount: keyframesResult.unoptimizedCount,
+        unoptimizedMemoryBytes: keyframesResult.unoptimizedMemoryBytes,
+        optimizedCount: keyframesResult.optimizedCount,
+        optimizedMemoryBytes: keyframesResult.optimizedMemoryBytes,
+        reductionPercentage: keyframesResult.reductionPercentage,
+        engine: keyframesResult.engine,
+      };
+
       MultimodalRepository.updateVideoMetadata(videoId, {
         durationSeconds: metadata.durationSeconds,
         fps: metadata.fps,
@@ -62,12 +116,25 @@ export class MultimodalPipeline {
       if (options.failAtStep === 'TRANSCRIPTION') {
         throw new Error('Simulated failure during TRANSCRIPTION');
       }
-      const transcriptionProvider = new MockTranscriptionProvider();
-      const transcripts = await transcriptionProvider.transcribe(videoId);
+
+      // Step 3a: Real audio extraction to 16kHz mono PCM WAV via host FFmpeg
+      const audioTrackInfo = await AudioProcessor.extractAudioWithFFmpeg(video.fileReference);
+
+      // Step 3b: Genuine Whisper transcription with tiered fallback
+      const transcriptionRouter = new ResilientTranscriptionRouter();
+      const transcripts = await transcriptionRouter.transcribe(
+        videoId,
+        audioTrackInfo.audioPath,
+        { language: 'en', provider: options.whisperProvider }
+      );
       MultimodalRepository.createTranscriptSegments(transcripts);
 
-      // 4. PRESENTATION_ANALYSIS (Speech Metrics)
-      const speechMetrics = AudioProcessor.analyzeSpeechMetrics(transcripts, metadata.durationSeconds);
+      // 4. PRESENTATION_ANALYSIS (Dynamic Acoustic & Speech Metrics)
+      const speechMetrics = AudioProcessor.analyzeSpeechMetrics(
+        transcripts,
+        metadata.durationSeconds,
+        audioTrackInfo
+      );
       MultimodalRepository.createOrUpdatePresentationMetrics({
         id: `pres_metrics_${videoId}`,
         videoId,
@@ -98,6 +165,13 @@ export class MultimodalPipeline {
       const claimDemoMatches = ClaimDemoMatcher.matchClaimsToDemo(evaluationId, videoId, demoObservations);
       MultimodalRepository.createClaimDemoMatches(claimDemoMatches);
 
+      // 7b. DEMO MILESTONES & VIDEO ANOMALIES
+      const demoMilestones = VisualObservationService.detectDemoMilestones(videoId, evaluationId);
+      MultimodalRepository.createDemoMilestones(demoMilestones);
+
+      const videoAnomalies = VisualObservationService.detectVideoAnomalies(videoId, evaluationId);
+      MultimodalRepository.createVideoAnomalies(videoAnomalies);
+
       // 8. SYNTHESIZE UNIFIED ANALYSIS TIMELINE
       const timelineEvents = this.synthesizeTimelineEvents(
         evaluationId,
@@ -106,7 +180,9 @@ export class MultimodalPipeline {
         transcripts,
         demoObservations,
         technicalMentions,
-        claimDemoMatches
+        claimDemoMatches,
+        demoMilestones,
+        videoAnomalies
       );
       MultimodalRepository.createAnalysisEvents(timelineEvents);
 
@@ -117,6 +193,8 @@ export class MultimodalPipeline {
         totalTranscriptSegments: transcripts.length,
         totalVisualEvents: visualEvents.length,
         totalTimelineEvents: timelineEvents.length,
+        totalMilestones: demoMilestones.length,
+        totalAnomalies: videoAnomalies.length,
       });
 
       const bundle = MultimodalRepository.getMultimodalAnalysisBundle(videoId);
@@ -143,7 +221,9 @@ export class MultimodalPipeline {
     transcripts: any[],
     demoObservations: any[],
     technicalMentions: any[],
-    claimDemoMatches: any[]
+    claimDemoMatches: any[],
+    demoMilestones: any[] = [],
+    videoAnomalies: any[] = []
   ): Omit<AnalysisEvent, 'createdAt'>[] {
     const rawEvents: Array<{
       timestamp: number;
@@ -201,6 +281,28 @@ export class MultimodalPipeline {
         description: `Claim Demonstrated (${c.demoSupport}): ${c.observationNotes}`,
         confidence: c.confidence,
         evidenceIds: [c.id],
+      });
+    }
+
+    // Demo milestones
+    for (const m of demoMilestones) {
+      rawEvents.push({
+        timestamp: m.timestamp,
+        eventType: 'MILESTONE',
+        description: `Milestone [${m.status}]: ${m.milestoneName} - ${m.verificationNotes}`,
+        confidence: m.confidence,
+        evidenceIds: [m.id],
+      });
+    }
+
+    // Video anomalies
+    for (const a of videoAnomalies) {
+      rawEvents.push({
+        timestamp: a.timestamp,
+        eventType: 'ANOMALY',
+        description: `Anomaly [${a.severity}]: ${a.anomalyType} - ${a.description}`,
+        confidence: 0.9,
+        evidenceIds: [a.id],
       });
     }
 

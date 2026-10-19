@@ -65,7 +65,7 @@ export class AssessmentRepository {
     db.transaction(() => {
       for (const a of assessments) {
         db.run(
-          `INSERT INTO technical_assessments (
+          `INSERT OR REPLACE INTO technical_assessments (
             id, evaluation_id, architecture_type, category, score, confidence,
             evidence_count, strengths_json, weaknesses_json, risks_json, explanation, evidence_ids_json, created_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -358,7 +358,7 @@ export class AssessmentRepository {
     db.transaction(() => {
       for (const s of scores) {
         db.run(
-          `INSERT INTO scores (
+          `INSERT OR REPLACE INTO scores (
             id, evaluation_id, category_key, category_label, raw_score,
             weight, weighted_score, confidence, evidence_count, explanation
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -398,7 +398,7 @@ export class AssessmentRepository {
     db.transaction(() => {
       for (const r of risks) {
         db.run(
-          `INSERT INTO risks (id, evaluation_id, title, severity, category, description, mitigation, related_evidence_ids_json)
+          `INSERT OR REPLACE INTO risks (id, evaluation_id, title, severity, category, description, mitigation, related_evidence_ids_json)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           r.id,
           r.evaluationId,
@@ -431,7 +431,7 @@ export class AssessmentRepository {
     db.transaction(() => {
       for (const r of recs) {
         db.run(
-          `INSERT INTO recommendations (
+          `INSERT OR REPLACE INTO recommendations (
             id, evaluation_id, title, problem, why_it_matters, recommended_action, expected_impact, priority, related_evidence_ids_json
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           r.id,
@@ -467,7 +467,7 @@ export class AssessmentRepository {
     db.transaction(() => {
       for (const q of questions) {
         db.run(
-          `INSERT INTO judge_questions (id, evaluation_id, question, reason, related_claim_id, related_assessment_category, priority)
+          `INSERT OR REPLACE INTO judge_questions (id, evaluation_id, question, reason, related_claim_id, related_assessment_category, priority)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
           q.id,
           q.evaluationId,

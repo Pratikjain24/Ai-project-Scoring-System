@@ -2,7 +2,7 @@
  * Phase 8 Specialist Evaluators - Domain Types
  */
 
-export type ProjectClassification = 'SOFTWARE' | 'HARDWARE' | 'HYBRID';
+export type ProjectClassification = 'SOFTWARE' | 'HARDWARE' | 'HYBRID' | 'BIOMEDICAL';
 
 export type AssessmentCategory = 'TECHNICAL' | 'IMPACT' | 'FEASIBILITY';
 

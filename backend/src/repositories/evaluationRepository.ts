@@ -16,7 +16,7 @@ export class EvaluationRepository {
       evaluation.confidence || null,
       evaluation.verdict || null,
       evaluation.executiveSummary || null,
-      evaluation.executionId,
+      evaluation.executionId || `exec_${Date.now()}`,
       now,
       now
     );
@@ -25,7 +25,11 @@ export class EvaluationRepository {
   }
 
   static findById(id: string): Evaluation | undefined {
-    const row = db.get<any>(`SELECT * FROM evaluations WHERE id = ?`, id);
+    let row = db.get<any>(`SELECT * FROM evaluations WHERE id = ?`, id);
+    if (!row) {
+      // Fallback: Check if the provided id is a project_id
+      row = db.get<any>(`SELECT * FROM evaluations WHERE project_id = ? ORDER BY created_at DESC LIMIT 1`, id);
+    }
     if (!row) return undefined;
 
     return {
@@ -92,7 +96,11 @@ export class EvaluationRepository {
       updates.overallScore !== undefined ? updates.overallScore : null,
       updates.confidence !== undefined ? updates.confidence : null,
       updates.verdict || null,
-      updates.executiveSummary || null,
+      updates.executiveSummary
+        ? (typeof updates.executiveSummary === 'string'
+            ? updates.executiveSummary
+            : (updates.executiveSummary as any).coreSummary || JSON.stringify(updates.executiveSummary))
+        : null,
       now,
       id
     );
@@ -104,7 +112,7 @@ export class EvaluationRepository {
 
   static createJob(job: AnalysisJob): void {
     db.run(
-      `INSERT INTO analysis_jobs (
+      `INSERT OR REPLACE INTO analysis_jobs (
         id, evaluation_id, job_type, stage_name, stage_index, total_stages,
         state, progress_percentage, message, execution_id, details_json, started_at, completed_at, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

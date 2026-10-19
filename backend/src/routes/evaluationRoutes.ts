@@ -13,11 +13,20 @@ import { JuryController } from '../controllers/juryController';
 // Project comparison (placed before /:id)
 evaluationRouter.get('/compare', JuryController.compareProjects);
 
+// Scenario 8 Mitigation: Canonical Single Source of Truth Rubric API
+evaluationRouter.get('/rubric', EvaluationController.getCanonicalRubric);
+
+// Persistent Queue & Job Resumption Endpoints (BullMQ / SQLite Durable Queue)
+evaluationRouter.get('/queue/status', EvaluationController.getQueueStatus);
+evaluationRouter.post('/queue/resume-interrupted', EvaluationController.resumeInterrupted);
+
 evaluationRouter.post('/', validateBody(CreateEvaluationSchema), EvaluationController.create);
 evaluationRouter.get('/', EvaluationController.getAll);
 evaluationRouter.get('/:id', EvaluationController.getById);
 evaluationRouter.post('/:id/start', EvaluationController.start);
+evaluationRouter.post('/:id/retry', EvaluationController.retry);
 evaluationRouter.post('/:id/cancel', EvaluationController.cancel);
+evaluationRouter.get('/:id/stream', EvaluationController.streamPipeline);
 
 import originalityRouter from './originalityIntelligenceRoutes';
 
@@ -51,8 +60,9 @@ evaluationRouter.get('/:id/contradictions', DocumentController.getContradictions
 evaluationRouter.get('/:id/document-quality', DocumentController.getDocumentQuality);
 evaluationRouter.get('/:id/documents', DocumentController.getDocumentsForEvaluation);
 
-// Multimodal Video Analysis sub-endpoints
+// Multimodal Video Analysis & Presentation sub-endpoints
 evaluationRouter.get('/:id/video-analysis', VideoController.getEvaluationVideoAnalysis);
+evaluationRouter.get('/:id/presentation', EvaluationController.getPresentation);
 
 // Research Intelligence Engine sub-endpoints (Phase 5)
 import { researchController } from '../controllers/researchIntelligenceController.js';

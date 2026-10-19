@@ -6,6 +6,7 @@ import type {
   ClaimImportance,
   ClaimVerificationResult,
   EvaluationClaimsSummary,
+  CodeSupportStatus,
 } from '../models/claim';
 import { ClaimNormalizer } from './claimNormalizer';
 import { MethodologyAnalyzer } from './methodologyAnalyzer';
@@ -14,6 +15,7 @@ import { ContradictionDetector } from './contradictionDetector';
 import { VerificationScorer } from './verificationScorer';
 import { JudgeQuestionGenerator } from './judgeQuestionGenerator';
 import { ClaimVerificationRepository } from '../repositories/claimVerificationRepository';
+import { SandboxedExecutionEngine } from './sandboxedExecutionEngine';
 
 export class ClaimVerificationPipeline {
   static async runPipeline(evaluationId: string): Promise<EvaluationClaimsSummary> {
@@ -99,9 +101,10 @@ export class ClaimVerificationPipeline {
         demoTimestamp = demoMatches[0].timestamp;
       }
 
-      // Step F: Document Support & Code Support
+      // Step F: Document Support & Sandboxed Code Execution Support
       let docSupport: any = suppEvRows.length >= 2 ? 'FULL' : suppEvRows.length === 1 ? 'PARTIAL' : 'NONE';
-      let codeSupport: any = /yolo|auth|pipeline/i.test(claim.claimText) ? 'SUPPORTED' : 'PARTIAL';
+      const dynamicCodeResult = await SandboxedExecutionEngine.verifyClaimDynamically(claim, params);
+      const codeSupport: CodeSupportStatus = dynamicCodeResult.codeSupport;
 
       // Step G: Claim-specific contradictions
       const claimContradictions = contradictions.filter(

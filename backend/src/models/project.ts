@@ -1,4 +1,4 @@
-export type ArchitectureType = 'SOFTWARE' | 'HARDWARE';
+export type ArchitectureType = 'SOFTWARE' | 'HARDWARE' | 'HYBRID' | 'BIOMEDICAL';
 
 export interface TeamMember {
   id: string;

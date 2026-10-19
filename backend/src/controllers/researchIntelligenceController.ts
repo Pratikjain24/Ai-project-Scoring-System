@@ -1,6 +1,9 @@
 import { Request, Response } from 'express';
 import { researchPipeline } from '../research-intelligence/researchPipeline.js';
 import { researchIntelligenceRepo } from '../repositories/researchIntelligenceRepository.js';
+import { createModuleLogger } from '../utils/logger.js';
+
+const controllerLogger = createModuleLogger('ResearchController');
 
 export class ResearchIntelligenceController {
   /**
@@ -11,19 +14,20 @@ export class ResearchIntelligenceController {
     try {
       const evaluationId = req.params.id;
       if (!evaluationId) {
-        res.status(400).json({ error: 'Evaluation ID is required' });
+        res.status(400).json({ success: false, error: { message: 'Evaluation ID is required' } });
         return;
       }
 
-      console.log(`[ResearchController] Triggering research execution for ${evaluationId}`);
+      controllerLogger.info(`Triggering research execution for ${evaluationId}`, { evaluationId });
       const bundle = await researchPipeline.executeResearch(evaluationId);
       res.status(200).json({
+        success: true,
         message: 'Research pipeline executed successfully',
         data: bundle
       });
     } catch (err: any) {
-      console.error('[ResearchController] Error running research:', err);
-      res.status(500).json({ error: err.message || 'Failed to execute research pipeline' });
+      controllerLogger.error('Error running research', { evaluationId: req.params.id, error: err });
+      res.status(500).json({ success: false, error: { message: err.message || 'Failed to execute research pipeline' } });
     }
   }
 
@@ -38,14 +42,14 @@ export class ResearchIntelligenceController {
 
       // If no bundle is saved yet, run it on-demand for smooth UX
       if (!bundle) {
-        console.log(`[ResearchController] No bundle found for ${evaluationId}. Running research on demand.`);
+        controllerLogger.info(`No bundle found for ${evaluationId}. Running research on demand.`, { evaluationId });
         bundle = await researchPipeline.executeResearch(evaluationId);
       }
 
-      res.status(200).json({ data: bundle });
+      res.status(200).json({ success: true, data: bundle });
     } catch (err: any) {
-      console.error('[ResearchController] Error getting research bundle:', err);
-      res.status(500).json({ error: err.message || 'Failed to get research bundle' });
+      controllerLogger.error('Error getting research bundle', { evaluationId: req.params.id, error: err });
+      res.status(500).json({ success: false, error: { message: err.message || 'Failed to get research bundle' } });
     }
   }
 
@@ -56,9 +60,9 @@ export class ResearchIntelligenceController {
     try {
       const evaluationId = req.params.id;
       const questions = researchIntelligenceRepo.getQuestions(evaluationId);
-      res.status(200).json({ data: questions });
+      res.status(200).json({ success: true, data: questions });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ success: false, error: { message: err.message } });
     }
   }
 
@@ -69,9 +73,9 @@ export class ResearchIntelligenceController {
     try {
       const evaluationId = req.params.id;
       const findings = researchIntelligenceRepo.getFindings(evaluationId);
-      res.status(200).json({ data: findings });
+      res.status(200).json({ success: true, data: findings });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ success: false, error: { message: err.message } });
     }
   }
 
@@ -82,9 +86,9 @@ export class ResearchIntelligenceController {
     try {
       const evaluationId = req.params.id;
       const sources = researchIntelligenceRepo.getSources(evaluationId);
-      res.status(200).json({ data: sources });
+      res.status(200).json({ success: true, data: sources });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ success: false, error: { message: err.message } });
     }
   }
 
@@ -95,9 +99,9 @@ export class ResearchIntelligenceController {
     try {
       const evaluationId = req.params.id;
       const evidence = researchIntelligenceRepo.getEvidence(evaluationId);
-      res.status(200).json({ data: evidence });
+      res.status(200).json({ success: true, data: evidence });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ success: false, error: { message: err.message } });
     }
   }
 
@@ -108,9 +112,9 @@ export class ResearchIntelligenceController {
     try {
       const evaluationId = req.params.id;
       const similarProjects = researchIntelligenceRepo.getSimilarProjects(evaluationId);
-      res.status(200).json({ data: similarProjects });
+      res.status(200).json({ success: true, data: similarProjects });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ success: false, error: { message: err.message } });
     }
   }
 
@@ -122,9 +126,9 @@ export class ResearchIntelligenceController {
       const evaluationId = req.params.id;
       const bundle = researchIntelligenceRepo.getResearchBundle(evaluationId);
       const competitors = bundle?.findings?.filter(f => f.findingType === 'COMPETING_PRODUCT') || [];
-      res.status(200).json({ data: competitors });
+      res.status(200).json({ success: true, data: competitors });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ success: false, error: { message: err.message } });
     }
   }
 
@@ -135,9 +139,9 @@ export class ResearchIntelligenceController {
     try {
       const evaluationId = req.params.id;
       const papers = researchIntelligenceRepo.getAcademicPapers(evaluationId);
-      res.status(200).json({ data: papers });
+      res.status(200).json({ success: true, data: papers });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ success: false, error: { message: err.message } });
     }
   }
 
@@ -148,9 +152,9 @@ export class ResearchIntelligenceController {
     try {
       const evaluationId = req.params.id;
       const patents = researchIntelligenceRepo.getPatents(evaluationId);
-      res.status(200).json({ data: patents });
+      res.status(200).json({ success: true, data: patents });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ success: false, error: { message: err.message } });
     }
   }
 
@@ -161,9 +165,9 @@ export class ResearchIntelligenceController {
     try {
       const evaluationId = req.params.id;
       const bundle = researchIntelligenceRepo.getResearchBundle(evaluationId);
-      res.status(200).json({ data: bundle?.technologyBenchmarks || [] });
+      res.status(200).json({ success: true, data: bundle?.technologyBenchmarks || [] });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ success: false, error: { message: err.message } });
     }
   }
 
@@ -174,6 +178,7 @@ export class ResearchIntelligenceController {
     try {
       const sourceId = req.params.id;
       res.status(200).json({
+        success: true,
         message: `Source ${sourceId} refreshed successfully`,
         data: {
           id: sourceId,
@@ -182,7 +187,7 @@ export class ResearchIntelligenceController {
         }
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ success: false, error: { message: err.message } });
     }
   }
 }

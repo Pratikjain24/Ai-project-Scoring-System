@@ -29,8 +29,10 @@ import type {
   ReportEvidenceIndexItem,
   ReportSourceCitation
 } from '../models/report';
+import { ReportSchemaGuard } from './reportSchemaGuard';
 
 export class ReportEngine {
+
   /**
    * Execute the 9-Stage Report Generation Pipeline
    */
@@ -919,7 +921,7 @@ export class ReportEngine {
       issues: consistencyWarnings,
     };
 
-    const report: EvaluationReport = {
+    const initialReport: EvaluationReport = {
       id: `rep_${evaluationId}_v${versionNumber}`,
       evaluationId,
       version: versionNumber,
@@ -941,6 +943,9 @@ export class ReportEngine {
       sections,
     };
 
-    return report;
+    // Scenario 9 Mitigation: Guarantee strictly 20 canonical sections in both dictionary and array format
+    const { guaranteedReport } = ReportSchemaGuard.guaranteeCanonicalSections(initialReport);
+    return guaranteedReport;
   }
 }
+

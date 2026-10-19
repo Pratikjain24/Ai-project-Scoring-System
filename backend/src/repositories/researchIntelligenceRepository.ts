@@ -65,8 +65,38 @@ export class ResearchIntelligenceRepository {
     return this.findResearchPlanByEvaluationId(validEvalId)!;
   }
 
+  static resolveEvaluationId(evaluationId: string): string {
+    if (!evaluationId) return evaluationId;
+    try {
+      const directPlan = db.get<any>(`SELECT evaluation_id FROM research_plans WHERE evaluation_id = ? LIMIT 1`, evaluationId);
+      if (directPlan) return directPlan.evaluation_id;
+
+      const evalWithPrefix = evaluationId.startsWith('eval_') ? evaluationId : `eval_${evaluationId}`;
+      const withPrefix = db.get<any>(`SELECT evaluation_id FROM research_plans WHERE evaluation_id = ? LIMIT 1`, evalWithPrefix);
+      if (withPrefix) return withPrefix.evaluation_id;
+
+      const stripped = evaluationId.replace(/^eval_/, '');
+      const withoutPrefix = db.get<any>(`SELECT evaluation_id FROM research_plans WHERE evaluation_id = ? LIMIT 1`, stripped);
+      if (withoutPrefix) return withoutPrefix.evaluation_id;
+
+      const byProj = db.get<any>(`SELECT evaluation_id FROM research_plans WHERE project_id = ? OR project_id = ? LIMIT 1`, evaluationId, stripped);
+      if (byProj) return byProj.evaluation_id;
+
+      const evalRow = db.get<any>(`SELECT id FROM evaluations WHERE id = ? OR project_id = ? OR id = ? LIMIT 1`, evaluationId, evaluationId, evalWithPrefix);
+      if (evalRow) return evalRow.id;
+    } catch {
+      // Fallback silently
+    }
+    return evaluationId;
+  }
+
   static findResearchPlanByEvaluationId(evaluationId: string): ResearchPlan | null {
-    const row = db.get<any>(`SELECT * FROM research_plans WHERE evaluation_id = ? ORDER BY created_at DESC LIMIT 1`, evaluationId);
+    const resolvedId = this.resolveEvaluationId(evaluationId);
+    const row = db.get<any>(
+      `SELECT * FROM research_plans WHERE evaluation_id = ? OR evaluation_id = ? ORDER BY created_at DESC LIMIT 1`,
+      resolvedId,
+      evaluationId
+    );
     if (!row) return null;
     return {
       id: row.id,
@@ -115,7 +145,12 @@ export class ResearchIntelligenceRepository {
   }
 
   static findQuestionsByEvaluationId(evaluationId: string): ResearchQuestion[] {
-    const rows = db.all<any>(`SELECT * FROM research_questions WHERE evaluation_id = ? ORDER BY priority ASC, created_at ASC`, evaluationId);
+    const resolvedId = this.resolveEvaluationId(evaluationId);
+    const rows = db.all<any>(
+      `SELECT * FROM research_questions WHERE evaluation_id = ? OR evaluation_id = ? ORDER BY priority ASC, created_at ASC`,
+      resolvedId,
+      evaluationId
+    );
     return rows.map((r) => ({
       id: r.id,
       evaluationId: r.evaluation_id,
@@ -162,7 +197,12 @@ export class ResearchIntelligenceRepository {
   }
 
   static findQueriesByEvaluationId(evaluationId: string): ResearchQuery[] {
-    const rows = db.all<any>(`SELECT * FROM research_queries WHERE evaluation_id = ? ORDER BY created_at ASC`, evaluationId);
+    const resolvedId = this.resolveEvaluationId(evaluationId);
+    const rows = db.all<any>(
+      `SELECT * FROM research_queries WHERE evaluation_id = ? OR evaluation_id = ? ORDER BY created_at ASC`,
+      resolvedId,
+      evaluationId
+    );
     return rows.map((r) => ({
       id: r.id,
       evaluationId: r.evaluation_id,
@@ -233,7 +273,12 @@ export class ResearchIntelligenceRepository {
   }
 
   static findSourcesByEvaluationId(evaluationId: string): ResearchSourceItem[] {
-    const rows = db.all<any>(`SELECT * FROM research_sources WHERE evaluation_id = ? ORDER BY overall_rank ASC, authority_score DESC`, evaluationId);
+    const resolvedId = this.resolveEvaluationId(evaluationId);
+    const rows = db.all<any>(
+      `SELECT * FROM research_sources WHERE evaluation_id = ? OR evaluation_id = ? ORDER BY overall_rank ASC, authority_score DESC`,
+      resolvedId,
+      evaluationId
+    );
     return rows.map((r) => this.mapSourceRow(r));
   }
 
@@ -290,12 +335,14 @@ export class ResearchIntelligenceRepository {
   }
 
   static findEvidenceByEvaluationId(evaluationId: string): ResearchSourceEvidence[] {
+    const resolvedId = this.resolveEvaluationId(evaluationId);
     const rows = db.all<any>(
       `SELECT rse.*, rs.title as source_title, rs.url as source_url
        FROM research_source_evidence rse
        LEFT JOIN research_sources rs ON rse.source_id = rs.id
-       WHERE rse.evaluation_id = ?
+       WHERE rse.evaluation_id = ? OR rse.evaluation_id = ?
        ORDER BY rse.created_at ASC`,
+      resolvedId,
       evaluationId
     );
 
@@ -366,12 +413,14 @@ export class ResearchIntelligenceRepository {
   }
 
   static findSimilarProjectsByEvaluationId(evaluationId: string): SimilarProject[] {
+    const resolvedId = this.resolveEvaluationId(evaluationId);
     const rows = db.all<any>(
       `SELECT sp.*, rs.url as source_url
        FROM similar_projects sp
        LEFT JOIN research_sources rs ON sp.source_id = rs.id
-       WHERE sp.evaluation_id = ?
+       WHERE sp.evaluation_id = ? OR sp.evaluation_id = ?
        ORDER BY sp.confidence DESC`,
+      resolvedId,
       evaluationId
     );
 
@@ -443,12 +492,14 @@ export class ResearchIntelligenceRepository {
   }
 
   static findAcademicPapersByEvaluationId(evaluationId: string): AcademicPaper[] {
+    const resolvedId = this.resolveEvaluationId(evaluationId);
     const rows = db.all<any>(
       `SELECT ap.*, rs.url as source_url
        FROM academic_papers ap
        LEFT JOIN research_sources rs ON ap.source_id = rs.id
-       WHERE ap.evaluation_id = ?
+       WHERE ap.evaluation_id = ? OR ap.evaluation_id = ?
        ORDER BY ap.year DESC`,
+      resolvedId,
       evaluationId
     );
 
@@ -518,7 +569,12 @@ export class ResearchIntelligenceRepository {
   }
 
   static findPatentRecordsByEvaluationId(evaluationId: string): PatentRecord[] {
-    const rows = db.all<any>(`SELECT * FROM patent_records WHERE evaluation_id = ? ORDER BY publication_date DESC`, evaluationId);
+    const resolvedId = this.resolveEvaluationId(evaluationId);
+    const rows = db.all<any>(
+      `SELECT * FROM patent_records WHERE evaluation_id = ? OR evaluation_id = ? ORDER BY publication_date DESC`,
+      resolvedId,
+      evaluationId
+    );
     return rows.map((r) => ({
       id: r.id,
       sourceId: r.source_id || undefined,
@@ -573,13 +629,15 @@ export class ResearchIntelligenceRepository {
   }
 
   static findContradictionsByEvaluationId(evaluationId: string): CrossSourceContradiction[] {
+    const resolvedId = this.resolveEvaluationId(evaluationId);
     const rows = db.all<any>(
       `SELECT csc.*, s1.title as source_a_title, s2.title as source_b_title
        FROM cross_source_contradictions csc
        LEFT JOIN research_sources s1 ON csc.source_a_id = s1.id
        LEFT JOIN research_sources s2 ON csc.source_b_id = s2.id
-       WHERE csc.evaluation_id = ?
+       WHERE csc.evaluation_id = ? OR csc.evaluation_id = ?
        ORDER BY csc.created_at ASC`,
+      resolvedId,
       evaluationId
     );
 
@@ -642,17 +700,18 @@ export class ResearchIntelligenceRepository {
     problemValidationFallback?: ProblemValidationResult,
     techBenchmarksFallback?: TechnologyBenchmarkResult[]
   ): ResearchIntelligenceBundle | null {
-    const plan = this.findResearchPlanByEvaluationId(evaluationId);
+    const resolvedId = this.resolveEvaluationId(evaluationId);
+    const plan = this.findResearchPlanByEvaluationId(resolvedId);
     if (!plan) return null;
 
-    const questions = this.findQuestionsByEvaluationId(evaluationId);
-    const queries = this.findQueriesByEvaluationId(evaluationId);
-    const sources = this.findSourcesByEvaluationId(evaluationId);
-    const evidence = this.findEvidenceByEvaluationId(evaluationId);
-    const similarProjects = this.findSimilarProjectsByEvaluationId(evaluationId);
-    const academicPapers = this.findAcademicPapersByEvaluationId(evaluationId);
-    const patents = this.findPatentRecordsByEvaluationId(evaluationId);
-    const contradictions = this.findContradictionsByEvaluationId(evaluationId);
+    const questions = this.findQuestionsByEvaluationId(resolvedId);
+    const queries = this.findQueriesByEvaluationId(resolvedId);
+    const sources = this.findSourcesByEvaluationId(resolvedId);
+    const evidence = this.findEvidenceByEvaluationId(resolvedId);
+    const similarProjects = this.findSimilarProjectsByEvaluationId(resolvedId);
+    const academicPapers = this.findAcademicPapersByEvaluationId(resolvedId);
+    const patents = this.findPatentRecordsByEvaluationId(resolvedId);
+    const contradictions = this.findContradictionsByEvaluationId(resolvedId);
 
     const highQualitySources = sources.filter((s) => s.qualityScore >= 80).length;
     const avgQuality = sources.length
@@ -849,11 +908,16 @@ export class ResearchIntelligenceRepository {
   }
 
   static getCachedResearch(evaluationId: string, topic: string = 'complete_bundle'): any | null {
-    return this.getCache(`${evaluationId}_${topic}`);
+    const resolvedId = this.resolveEvaluationId(evaluationId);
+    return this.getCache(`${resolvedId}_${topic}`) || this.getCache(`${evaluationId}_${topic}`);
   }
 
   static setCachedResearch(evaluationId: string, topic: string = 'complete_bundle', data: any, ttlSeconds: number = 1800): void {
-    this.setCache(`${evaluationId}_${topic}`, topic, data, ttlSeconds);
+    const resolvedId = this.resolveEvaluationId(evaluationId);
+    this.setCache(`${resolvedId}_${topic}`, topic, data, ttlSeconds);
+    if (resolvedId !== evaluationId) {
+      this.setCache(`${evaluationId}_${topic}`, topic, data, ttlSeconds);
+    }
   }
 
   static getQuestions(evaluationId: string): ResearchQuestion[] {

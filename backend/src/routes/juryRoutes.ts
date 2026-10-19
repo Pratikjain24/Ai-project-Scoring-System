@@ -19,6 +19,10 @@ juryRouter.post('/:id/score/simulate', JuryController.simulate);
 
 juryRouter.get('/:id/jury', JuryController.getJury);
 juryRouter.post('/:id/jury/finalize', JuryController.finalizeJury);
+juryRouter.get('/:id/jury/deliberation', JuryController.getDeliberation);
+juryRouter.get('/:id/jury/debate', JuryController.getDeliberation);
+juryRouter.post('/:id/jury/deliberate', JuryController.runDeliberation);
+juryRouter.post('/:id/jury/debate', JuryController.runDeliberation);
 juryRouter.get('/:id/jury/questions', JuryController.getQuestions);
 juryRouter.post('/:id/jury/questions/:questionId/interact', JuryController.interactQuestion);
 juryRouter.get('/:id/jury/notes', JuryController.getNotes);
@@ -30,3 +34,4 @@ juryRouter.post('/:id/jury/simulate', JuryController.simulate);
 juryRouter.get('/:id/history', JuryController.getHistory);
 juryRouter.post('/:id/human-review', JuryController.addHumanReview);
 juryRouter.get('/:id/human-review', JuryController.getHumanReviews);
+juryRouter.get('/:id/audit-trail', JuryController.getAuditTrail);

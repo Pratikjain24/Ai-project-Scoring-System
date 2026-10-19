@@ -50,9 +50,14 @@ export class ClaimNormalizer {
       else metric = claimType.toLowerCase();
     }
 
+    // Check for evaluation method
+    if (/benchmark|holdout|k-fold|validation|test\s+split/i.test(text)) {
+      evaluationMethod = 'Benchmark Dataset Validation';
+    }
+
     // Check for explicit dataset mentions
-    if (/on\s+([A-Za-z0-9_\-]+(?:\s+[A-Za-z0-9_\-]+)?\s+(?:dataset|benchmark))/i.test(text)) {
-      const match = text.match(/on\s+([A-Za-z0-9_\-]+(?:\s+[A-Za-z0-9_\-]+)?\s+(?:dataset|benchmark))/i);
+    if (/on\s+([A-Za-z0-9_-]+(?:\s+[A-Za-z0-9_-]+)?\s+(?:dataset|benchmark))/i.test(text)) {
+      const match = text.match(/on\s+([A-Za-z0-9_-]+(?:\s+[A-Za-z0-9_-]+)?\s+(?:dataset|benchmark))/i);
       if (match) dataset = match[1];
     } else if (/grddc/i.test(text)) {
       dataset = 'GRDDC-2022';

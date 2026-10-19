@@ -1,6 +1,9 @@
 import type { Request, Response } from 'express';
 import { ClaimVerificationPipeline } from '../claim-verification/claimVerificationPipeline';
 import { ClaimVerificationRepository } from '../repositories/claimVerificationRepository';
+import { createModuleLogger } from '../utils/logger';
+
+const claimLogger = createModuleLogger('ClaimVerificationController');
 
 export class ClaimVerificationController {
   static async getClaims(req: Request, res: Response): Promise<void> {
@@ -14,7 +17,7 @@ export class ClaimVerificationController {
 
       res.status(200).json({ success: true, data: summary });
     } catch (error: any) {
-      console.error('[ClaimController] getClaims error:', error);
+      claimLogger.error('getClaims error', { evaluationId: req.params.id, error });
       res.status(500).json({ success: false, error: error.message });
     }
   }
@@ -29,7 +32,7 @@ export class ClaimVerificationController {
         data: summary,
       });
     } catch (error: any) {
-      console.error('[ClaimController] analyze error:', error);
+      claimLogger.error('analyze error', { evaluationId: req.params.id, error });
       res.status(500).json({ success: false, error: error.message });
     }
   }
@@ -183,7 +186,7 @@ export class ClaimVerificationController {
         data: { review, bundle: updatedBundle },
       });
     } catch (error: any) {
-      console.error('[ClaimController] submitHumanReview error:', error);
+      claimLogger.error('submitHumanReview error', { error });
       res.status(500).json({ success: false, error: error.message });
     }
   }
