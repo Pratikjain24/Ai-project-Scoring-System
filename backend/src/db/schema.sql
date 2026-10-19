@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  architecture_type TEXT NOT NULL CHECK(architecture_type IN ('SOFTWARE', 'HARDWARE')),
+  architecture_type TEXT NOT NULL CHECK(architecture_type IN ('SOFTWARE', 'HARDWARE', 'HYBRID', 'BIOMEDICAL')),
   category TEXT NOT NULL,
   domain TEXT NOT NULL,
   tagline TEXT,
@@ -90,6 +90,22 @@ CREATE TABLE IF NOT EXISTS analysis_jobs (
   started_at DATETIME,
   completed_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 7b. Persistent Pipeline Queue Jobs (BullMQ Persistence / Auto-Resume Tracker)
+CREATE TABLE IF NOT EXISTS pipeline_queue_jobs (
+  id TEXT PRIMARY KEY,
+  evaluation_id TEXT NOT NULL REFERENCES evaluations(id) ON DELETE CASCADE,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  execution_id TEXT NOT NULL,
+  options_json TEXT,
+  resume_from_stage INTEGER DEFAULT 1,
+  status TEXT NOT NULL CHECK(status IN ('WAITING', 'ACTIVE', 'COMPLETED', 'FAILED', 'CANCELLED')),
+  attempts INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 3,
+  last_error TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 8. Universal Evidence
@@ -362,6 +378,8 @@ CREATE INDEX IF NOT EXISTS idx_evidence_eval ON evidence(evaluation_id);
 CREATE INDEX IF NOT EXISTS idx_claims_eval ON claims(evaluation_id);
 CREATE INDEX IF NOT EXISTS idx_scores_eval ON scores(evaluation_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_eval ON analysis_jobs(evaluation_id);
+CREATE INDEX IF NOT EXISTS idx_pipeline_queue_eval ON pipeline_queue_jobs(evaluation_id);
+CREATE INDEX IF NOT EXISTS idx_pipeline_queue_status ON pipeline_queue_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_research_eval ON research_sources(evaluation_id);
 
 -- ============================================================================
@@ -431,7 +449,7 @@ CREATE TABLE IF NOT EXISTS document_architecture (
   evaluation_id TEXT NOT NULL REFERENCES evaluations(id) ON DELETE CASCADE,
   nodes_json TEXT NOT NULL,
   relationships_json TEXT NOT NULL,
-  architecture_type TEXT NOT NULL CHECK(architecture_type IN ('SOFTWARE', 'HARDWARE', 'HYBRID')),
+  architecture_type TEXT NOT NULL CHECK(architecture_type IN ('SOFTWARE', 'HARDWARE', 'HYBRID', 'BIOMEDICAL')),
   confidence REAL NOT NULL DEFAULT 1.0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -577,6 +595,44 @@ CREATE TABLE IF NOT EXISTS claim_demo_matches (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 38b. Demo Milestones (Frame-Accurate Milestone Verification Register)
+CREATE TABLE IF NOT EXISTS demo_milestones (
+  id TEXT PRIMARY KEY,
+  video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  evaluation_id TEXT REFERENCES evaluations(id) ON DELETE CASCADE,
+  milestone_name TEXT NOT NULL,
+  timestamp REAL NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('VERIFIED', 'PARTIAL', 'NOT_DEMONSTRATED', 'FAILED')),
+  confidence REAL NOT NULL DEFAULT 1.0,
+  frame_reference TEXT,
+  thumbnail_url TEXT,
+  claim_id TEXT REFERENCES claims(id) ON DELETE SET NULL,
+  evidence_id TEXT REFERENCES evidence(id) ON DELETE SET NULL,
+  verification_notes TEXT,
+  details_json TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 38c. Video Demonstration Anomaly Register
+CREATE TABLE IF NOT EXISTS video_anomalies (
+  id TEXT PRIMARY KEY,
+  video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  evaluation_id TEXT REFERENCES evaluations(id) ON DELETE CASCADE,
+  anomaly_type TEXT NOT NULL CHECK(anomaly_type IN (
+    'FRAME_DROP', 'BUFFER_OVERRUN', 'LATENCY_SPIKE', 'DETECTION_FALSE_NEGATIVE',
+    'TELEMETRY_DESYNC', 'ENVIRONMENT_ABSENCE', 'AUDIO_DROPOUT', 'FREEZE_FRAME'
+  )),
+  timestamp REAL NOT NULL,
+  severity TEXT NOT NULL CHECK(severity IN ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW')),
+  description TEXT NOT NULL,
+  frame_reference TEXT,
+  duration_seconds REAL DEFAULT 0,
+  detected_by TEXT NOT NULL DEFAULT 'HOST_FFMPEG_STREAM_AUDIT',
+  resolved INTEGER NOT NULL DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+
 -- 39. Presentation Quality Metrics
 CREATE TABLE IF NOT EXISTS presentation_metrics (
   id TEXT PRIMARY KEY,
@@ -602,7 +658,7 @@ CREATE TABLE IF NOT EXISTS analysis_events (
   timestamp REAL NOT NULL,
   event_type TEXT NOT NULL CHECK(event_type IN (
     'SLIDE_CHANGE', 'SPEECH', 'CLAIM', 'TECHNICAL_MENTION',
-    'DEMO', 'ERROR', 'RESULT', 'QUESTION', 'ANSWER', 'SCENE_CHANGE'
+    'DEMO', 'MILESTONE', 'ANOMALY', 'ERROR', 'RESULT', 'QUESTION', 'ANSWER', 'SCENE_CHANGE'
   )),
   description TEXT NOT NULL,
   confidence REAL NOT NULL DEFAULT 1.0,
@@ -1544,5 +1600,74 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_event ON audit_logs(event);
 CREATE INDEX IF NOT EXISTS idx_usage_records_eval ON usage_records(evaluation_id);
 CREATE INDEX IF NOT EXISTS idx_evidence_reqs_eval ON evidence_requests(evaluation_id);
 CREATE INDEX IF NOT EXISTS idx_eval_revisions_eval ON evaluation_revisions(evaluation_id);
+
+-- =========================================================================
+-- PHASE 9/11: AI JURY DELIBERATION (Multi-Persona Cross-Examination)
+-- =========================================================================
+
+-- 93. AI Jury Deliberations (Adversarial & Consensus Debate Loop)
+CREATE TABLE IF NOT EXISTS jury_deliberations (
+  id TEXT PRIMARY KEY,
+  evaluation_id TEXT NOT NULL REFERENCES evaluations(id) ON DELETE CASCADE,
+  initial_scores_json TEXT NOT NULL,
+  final_scores_json TEXT NOT NULL,
+  consensus_score REAL NOT NULL,
+  ratified_verdict TEXT NOT NULL,
+  rounds_json TEXT NOT NULL,
+  dissenting_opinions_json TEXT NOT NULL DEFAULT '[]',
+  transcript TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_jury_delib_eval ON jury_deliberations(evaluation_id);
+
+-- =========================================================================
+-- AUTH & SECURITY: TOKEN BLACKLIST & REVOCATION (Redis / SQLite)
+-- =========================================================================
+
+-- 94. Token Blacklist
+CREATE TABLE IF NOT EXISTS token_blacklist (
+  jti TEXT PRIMARY KEY,
+  user_id TEXT,
+  expires_at INTEGER NOT NULL,
+  reason TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_token_blacklist_exp ON token_blacklist(expires_at);
+
+-- 95. User Session Revocations
+CREATE TABLE IF NOT EXISTS user_session_revocations (
+  user_id TEXT PRIMARY KEY,
+  revoked_before INTEGER NOT NULL,
+  reason TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =========================================================================
+-- CLOUD & OBJECT STORAGE: STORED FILES REGISTRY
+-- =========================================================================
+
+-- 96. Stored Files Registry
+CREATE TABLE IF NOT EXISTS stored_files (
+  id TEXT PRIMARY KEY,
+  file_key TEXT UNIQUE NOT NULL,
+  original_filename TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL,
+  checksum_sha256 TEXT NOT NULL,
+  storage_driver TEXT NOT NULL,
+  storage_bucket TEXT,
+  storage_path TEXT,
+  metadata_json TEXT,
+  evaluation_id TEXT,
+  project_id TEXT,
+  uploaded_by_user_id TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_stored_files_key ON stored_files(file_key);
+CREATE INDEX IF NOT EXISTS idx_stored_files_eval ON stored_files(evaluation_id);
+
 
 

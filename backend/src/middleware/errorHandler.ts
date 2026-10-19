@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { logger } from '../utils/logger';
 
 export interface AppErrorOptions {
   statusCode?: number;
@@ -22,7 +23,7 @@ export class AppError extends Error {
 
 export function errorHandler(
   err: any,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction
 ): void {
@@ -31,7 +32,15 @@ export function errorHandler(
   const message = err.message || 'An unexpected server error occurred.';
 
   if (statusCode >= 500) {
-    console.error(`[Error Handler] ${code}:`, err);
+    logger.error(`Error Handler: ${code}`, {
+      module: 'ErrorHandler',
+      code,
+      statusCode,
+      url: req.originalUrl,
+      method: req.method,
+      executionId: (req as any).executionId,
+      error: err,
+    });
   }
 
   res.status(statusCode).json({

@@ -9,14 +9,18 @@ import { ScoringEngine } from '../scoring/scoringEngine';
 import { JudgeQuestionEngine } from '../jury/judgeQuestionEngine';
 import { RecommendationEngine } from '../recommendations/recommendationEngine';
 import { ReportService } from '../report/reportService';
+import { DomainSynthesisService } from '../services/domainSynthesisService';
 
 import { DocumentRepository } from '../repositories/documentRepository';
 import { DocumentPipeline } from '../document-intelligence/documentPipeline';
 import { MultimodalRepository } from '../repositories/multimodalRepository';
 import { MultimodalPipeline } from '../multimodal/multimodalPipeline';
+import { createModuleLogger } from '../utils/logger';
+
+const seedLogger = createModuleLogger('DatabaseSeed');
 
 export async function seedDatabase(): Promise<void> {
-  console.log('🌱 Initializing schema & seeding database...');
+  seedLogger.info('🌱 Initializing schema & seeding database...');
   initSchema();
 
   const database = getDb();
@@ -166,8 +170,100 @@ export async function seedDatabase(): Promise<void> {
       problemStatement: 'DC arc faults in residential photovoltaic installations cause over 800 structural fires annually across North America.',
       solutionDescription: 'High-speed 100MHz current waveform analyzer executing edge 1D-CNN to disconnect solar string within 1.8 milliseconds of arc detection.',
       teamName: 'Helios Power Dynamics'
+    },
+    {
+      id: 'aeropulse-px4',
+      name: 'AeroPulse PX-4 Drone Engine',
+      architectureType: 'HARDWARE' as const,
+      category: 'Aerospace / Autonomous Robotics',
+      domain: 'Heavy-Lift UAV Hybrid Propulsion',
+      tagline: 'Hybrid heavy-lift propulsion with dual-core lockstep failover',
+      problemStatement: 'Commercial inspection drones lack flight endurance beyond 35 minutes and lack deterministic hardware failover against rotor ESC lockup.',
+      solutionDescription: 'Compact multi-fuel turbine generator feeding direct-drive brushless motors controlled via ASIL-D lockstep ARM microcontrollers.',
+      teamName: 'AeroPulse Flight Technologies'
+    },
+    {
+      id: 'aquapurify-osmo',
+      name: 'AquaPurify Autonomous Desal',
+      architectureType: 'HARDWARE' as const,
+      category: 'CleanTech / Microfluidics',
+      domain: 'Solar Thermal Membrane Desalination',
+      tagline: 'Solar-thermal membrane distillation with automated anti-fouling flush',
+      problemStatement: 'Over 2.2B people lack safe potable drinking water in coastal arid regions where commercial reverse osmosis plants require prohibitive grid power.',
+      solutionDescription: 'Photovoltaic-thermal driven membrane distillation module with ultrasonic transducer scale mitigation producing 450 liters/day off-grid.',
+      teamName: 'AquaPurify Technologies'
+    },
+    {
+      id: 'bioprint-osteo',
+      name: 'BioPrint OsteoScaffold',
+      architectureType: 'HARDWARE' as const,
+      category: 'BioTech / 3D Biomaterial Printing',
+      domain: 'Orthopedic Regenerative Implants',
+      tagline: 'Patient-specific 3D bio-ceramic scaffold with osteoinductive microporosity',
+      problemStatement: 'Severe bone fracture defects exceeding 5cm fail to heal spontaneously and autografts cause secondary donor-site morbidity in 28% of patients.',
+      solutionDescription: 'Extrusion 3D bioprinter fabricating hydroxyapatite/polycaprolactone bioresorbable lattices with pore gradients matching trabecular bone.',
+      teamName: 'OsteoForm Biomechanics'
+    },
+    {
+      id: 'finguard-gnn',
+      name: 'FinGuard Fraud Graph',
+      architectureType: 'SOFTWARE' as const,
+      category: 'FinTech / Graph Neural Networks',
+      domain: 'Real-Time Anti-Money Laundering Defense',
+      tagline: 'Real-time multi-hop anti-money-laundering syndicate detection',
+      problemStatement: 'Sophisticated money-laundering syndicates layer illicit capital across hundreds of synthetic mule accounts, bypassing traditional rule-based threshold filters.',
+      solutionDescription: 'Graph Neural Network (PyTorch Geometric) analyzing streaming financial transaction graphs to classify cyclic structuring patterns within 12 milliseconds.',
+      teamName: 'FinGuard Systems'
+    },
+    {
+      id: 'neuroflex-bci',
+      name: 'NeuroFlex Prosthetic BCI',
+      architectureType: 'HARDWARE' as const,
+      category: 'NeuroTech / EMG Neural Interface',
+      domain: 'Adaptive Myoelectric Upper-Limb Prosthetics',
+      tagline: 'Continuous intent-decoding upper-limb myoelectric prosthesis',
+      problemStatement: 'Upper-limb amputees abandon motorized prosthetics at a 44% rate due to unintuitive dual-muscle switching and unnatural latency (>150ms).',
+      solutionDescription: '32-channel high-density surface EMG armband running temporal convolutional network to predict individual finger kinematics with 22ms latency.',
+      teamName: 'NeuroFlex Robotics'
+    },
+    {
+      id: 'quantumsafe-kms',
+      name: 'QuantumSafe Key Exchange',
+      architectureType: 'SOFTWARE' as const,
+      category: 'Cryptography / Post-Quantum Systems',
+      domain: 'Lattice-Based Key Encapsulation (ML-KEM/Kyber)',
+      tagline: 'Hardware-backed ML-KEM lattice key exchange with hybrid TLS 1.3',
+      problemStatement: 'Harvest-now-decrypt-later attacks threaten all RSA and Elliptic Curve encrypted communications ahead of cryptanalytically relevant quantum computers.',
+      solutionDescription: 'Drop-in OpenSSL 3.3 engine implementing NIST FIPS 203 (ML-KEM/Kyber-768) and FIPS 204 (ML-DSA) hybrid post-quantum cipher suites.',
+      teamName: 'QuantumLattice Labs'
+    },
+    {
+      id: 'eduadaptive-ai',
+      name: 'EduAdaptive Cognitive Tutor',
+      architectureType: 'SOFTWARE' as const,
+      category: 'EdTech / Multimodal Learning Analytics',
+      domain: 'Personalized K-12 STEM Cognitive Acceleration',
+      tagline: 'Personalized STEM mastery tutoring with real-time cognitive load detection',
+      problemStatement: 'Standardized mass instruction fails to adapt to individual student knowledge gaps and cognitive fatigue in foundational high school mathematics.',
+      solutionDescription: 'Web-based interactive tutoring platform using Bayesian Knowledge Tracing and webcam eye-tracking to dynamically modulate problem difficulty.',
+      teamName: 'CognitivePath EdTech'
     }
   ];
+
+  const scoreMap: Record<string, { score: number; confidence: number; verdict: string }> = {
+    'smart-road-vision': { score: 84.7, confidence: 89, verdict: 'STRONG' },
+    'agrosense': { score: 78.2, confidence: 84, verdict: 'PROMISING' },
+    'cybershield': { score: 89.1, confidence: 92, verdict: 'EXCEPTIONAL' },
+    'meditrack': { score: 71.5, confidence: 78, verdict: 'PROMISING' },
+    'solarguard': { score: 86.4, confidence: 91, verdict: 'STRONG' },
+    'aeropulse-px4': { score: 84.2, confidence: 89, verdict: 'STRONG' },
+    'aquapurify-osmo': { score: 88.5, confidence: 90, verdict: 'STRONG' },
+    'bioprint-osteo': { score: 91.8, confidence: 94, verdict: 'EXCEPTIONAL' },
+    'finguard-gnn': { score: 79.4, confidence: 86, verdict: 'PROMISING' },
+    'neuroflex-bci': { score: 85.0, confidence: 88, verdict: 'STRONG' },
+    'quantumsafe-kms': { score: 82.6, confidence: 89, verdict: 'STRONG' },
+    'eduadaptive-ai': { score: 64.5, confidence: 76, verdict: 'NEEDS_IMPROVEMENT' },
+  };
 
   for (const p of sampleProjects) {
     ProjectRepository.create(p);
@@ -175,6 +271,7 @@ export async function seedDatabase(): Promise<void> {
     // Create Evaluation for each project
     const evaluationId = `eval_${p.id}`;
     const executionId = `exec_seed_${p.id}`;
+    const pScore = scoreMap[p.id] || { score: 82.0, confidence: 85, verdict: 'STRONG' };
 
     EvaluationRepository.create({
       id: evaluationId,
@@ -182,11 +279,12 @@ export async function seedDatabase(): Promise<void> {
       mode: p.architectureType === 'HARDWARE' ? 'LIVE_CAMERA' : 'VIDEO_ANALYSIS',
       status: 'COMPLETED',
       executionId,
-      overallScore: p.id === 'smart-road-vision' ? 84.7 : p.id === 'cybershield' ? 89.1 : p.id === 'solarguard' ? 86.4 : p.id === 'agrosense' ? 78.2 : 71.5,
-      confidence: p.id === 'smart-road-vision' ? 89 : p.id === 'cybershield' ? 92 : 84,
-      verdict: p.id === 'cybershield' ? 'EXCEPTIONAL' : p.id === 'meditrack' ? 'PROMISING' : 'STRONG',
-      executiveSummary: `Strong technical prototype addressing a significant real-world problem. High impact potential with demonstrated edge inference pipeline on NVIDIA Jetson.`,
+      overallScore: pScore.score,
+      confidence: pScore.confidence,
+      verdict: pScore.verdict,
+      executiveSummary: `Evaluated ${p.name} (${p.architectureType}) in ${p.domain}. ${pScore.verdict === 'EXCEPTIONAL' ? 'Superior technical execution exceeding institutional benchmarks.' : pScore.verdict === 'STRONG' ? 'Strong prototype addressing an urgent real-world problem with verified telemetry.' : 'Promising baseline with identified areas for refinement and verification.'}`,
     });
+
 
     // Seed Evidence
     const evidenceList = [
@@ -294,7 +392,7 @@ export async function seedDatabase(): Promise<void> {
     });
 
     // Seed ProjectDNA
-    AssessmentRepository.saveProjectDNA({
+    const dna = {
       id: `dna_${evaluationId}`,
       evaluationId,
       problem: p.problemStatement,
@@ -310,7 +408,8 @@ export async function seedDatabase(): Promise<void> {
       confidence: 94,
       evidenceIds: evidenceList.map(e => e.id),
       createdAt: new Date().toISOString(),
-    });
+    };
+    AssessmentRepository.saveProjectDNA(dna);
 
     // Seed Technical Assessments
     const technicalAssessments = [
@@ -333,13 +432,13 @@ export async function seedDatabase(): Promise<void> {
     AssessmentRepository.saveTechnicalAssessments(technicalAssessments);
 
     // Seed Originality
-    AssessmentRepository.saveOriginalityAssessment({
+    const originalityAssessment = {
       id: `orig_${evaluationId}`,
       evaluationId,
       originalityScore: p.id === 'smart-road-vision' ? 68 : p.id === 'cybershield' ? 81 : 78,
       similarityScore: p.id === 'smart-road-vision' ? 32 : 19,
       confidence: 74,
-      classification: p.id === 'smart-road-vision' ? 'INSPIRED' : 'ORIGINAL',
+      classification: (p.id === 'smart-road-vision' ? 'INSPIRED' : 'ORIGINAL') as any,
       similarities: [
         {
           id: `sim_${evaluationId}_1`,
@@ -356,10 +455,11 @@ export async function seedDatabase(): Promise<void> {
       keyDifferences: ['Custom edge quantizer', 'Proprietary trajectory smoothing algorithm'],
       evidenceIds: evidenceList.map(e => e.id),
       createdAt: new Date().toISOString(),
-    });
+    };
+    AssessmentRepository.saveOriginalityAssessment(originalityAssessment);
 
     // Seed Impact & Feasibility
-    AssessmentRepository.saveImpactAssessment({
+    const impactAssessment = {
       id: `imp_${evaluationId}`,
       evaluationId,
       socialImpactScore: 92,
@@ -378,9 +478,10 @@ export async function seedDatabase(): Promise<void> {
       },
       evidenceIds: evidenceList.map(e => e.id),
       createdAt: new Date().toISOString(),
-    });
+    };
+    AssessmentRepository.saveImpactAssessment(impactAssessment);
 
-    AssessmentRepository.saveFeasibilityAssessment({
+    const feasibilityAssessment = {
       id: `feas_${evaluationId}`,
       evaluationId,
       prototypeReadiness: 84,
@@ -399,10 +500,11 @@ export async function seedDatabase(): Promise<void> {
       },
       evidenceIds: evidenceList.map(e => e.id),
       createdAt: new Date().toISOString(),
-    });
+    };
+    AssessmentRepository.saveFeasibilityAssessment(feasibilityAssessment);
 
     // Seed Presentation & Demo
-    AssessmentRepository.savePresentationAnalysis({
+    const presentationAnalysis = {
       id: `pres_${evaluationId}`,
       evaluationId,
       presentationScore: 76,
@@ -436,9 +538,10 @@ export async function seedDatabase(): Promise<void> {
       improvementSuggestions: ['Pace technical slides at ~130 WPM', 'Structure direct edge-case failure answers'],
       evidenceIds: evidenceList.map(e => e.id),
       createdAt: new Date().toISOString(),
-    });
+    };
+    AssessmentRepository.savePresentationAnalysis(presentationAnalysis);
 
-    AssessmentRepository.saveDemoAnalysis({
+    const demoAnalysis = {
       id: `demo_${evaluationId}`,
       evaluationId,
       demoScore: 84,
@@ -456,32 +559,24 @@ export async function seedDatabase(): Promise<void> {
       unsupportedClaims: ['Night-time 95% accuracy was not demonstrated on active video.'],
       evidenceIds: evidenceList.map(e => e.id),
       createdAt: new Date().toISOString(),
-    });
+    };
+    AssessmentRepository.saveDemoAnalysis(demoAnalysis);
 
-    // Calculate deterministic scores
-    const verdict = ScoringEngine.calculate(evaluationId, {
-      problemNeedRaw: 91,
-      technicalQualityRaw: 87,
-      originalityRaw: p.id === 'smart-road-vision' ? 68 : 81,
-      socialImpactRaw: 92,
-      presentationRaw: 76,
-      demonstrationRaw: 84,
-      feasibilityScalabilityRaw: 79,
-      futurePotentialRaw: 94,
-      evidenceCounts: {
-        problemNeed: 6,
-        technicalQuality: 12,
-        originality: 7,
-        socialImpact: 5,
-        presentation: 4,
-        demonstration: 4,
-        feasibilityScalability: 4,
-        futurePotential: 2,
-      },
-      rawConfidence: 89,
-      hasContradictedClaims: false,
-      unverifiedClaimRatio: 0.25,
-    });
+    // Calculate deterministic scores dynamically from verified evidence
+    const scoringInputs = DomainSynthesisService.deriveScoringInputs(
+      evaluationId,
+      p,
+      dna,
+      technicalAssessments,
+      originalityAssessment,
+      impactAssessment,
+      feasibilityAssessment,
+      presentationAnalysis,
+      demoAnalysis,
+      claims,
+      evidenceList
+    );
+    const verdict = ScoringEngine.calculate(evaluationId, scoringInputs);
     AssessmentRepository.saveScores(verdict.categoryScores);
 
     // Seed Judge Questions & Recommendations
@@ -671,7 +766,7 @@ export async function seedDatabase(): Promise<void> {
   ClaimVerificationPipeline.seedBenchmarkClaims('eval_smart-road-vision');
 
   // --- Seed Phase 3: Document Intelligence for Smart Road Vision ---
-  console.log('  📄 Seeding Phase 3 Document Intelligence artifacts...');
+  seedLogger.info('  📄 Seeding Phase 3 Document Intelligence artifacts...');
   const srvDeck = DocumentRepository.createDocument({
     id: 'doc_srv_pitchdeck',
     projectId: 'smart-road-vision',
@@ -713,7 +808,7 @@ export async function seedDatabase(): Promise<void> {
   );
 
   // --- Seed Phase 4: Multimodal Video Analysis for Smart Road Vision ---
-  console.log('  🎥 Seeding Phase 4 Multimodal Video Analysis artifacts...');
+  seedLogger.info('  🎥 Seeding Phase 4 Multimodal Video Analysis artifacts...');
   const srvVideo = MultimodalRepository.createVideo({
     id: 'vid_smart_road_vision_benchmark',
     evaluationId: 'eval_smart-road-vision',
@@ -731,28 +826,28 @@ export async function seedDatabase(): Promise<void> {
   await MultimodalPipeline.processVideo(srvVideo.id);
 
   // --- Seed Phase 5: Research Intelligence Engine for Smart Road Vision ---
-  console.log('  🔬 Seeding Phase 5 Research Intelligence Engine artifacts...');
+  seedLogger.info('  🔬 Seeding Phase 5 Research Intelligence Engine artifacts...');
   const { researchPipeline } = await import('../research-intelligence/researchPipeline.js');
   await researchPipeline.executeResearch('eval_smart-road-vision');
 
   // --- Seed Phase 6: Originality & Multi-Dimensional Similarity Intelligence Engine ---
-  console.log('  🔍 Seeding Phase 6 Originality & Multi-Dimensional Similarity Intelligence artifacts...');
+  seedLogger.info('  🔍 Seeding Phase 6 Originality & Multi-Dimensional Similarity Intelligence artifacts...');
   const { OriginalityPipeline } = await import('../originality-intelligence/originalityPipeline.js');
   await OriginalityPipeline.executeAnalysis('eval_smart-road-vision');
 
   // --- Seed Phase 7: Claim Verification & Truth Analysis Engine ---
-  console.log('  ⚖️ Seeding Phase 7 Claim Verification & Truth Analysis artifacts...');
+  seedLogger.info('  ⚖️ Seeding Phase 7 Claim Verification & Truth Analysis artifacts...');
   await ClaimVerificationPipeline.executeAnalysis('eval_smart-road-vision');
 
   // --- Seed Phase 8: Technical + Impact + Feasibility Intelligence Engine ---
-  console.log('  📊 Seeding Phase 8 Technical + Impact + Feasibility Intelligence Engine artifacts...');
+  seedLogger.info('  📊 Seeding Phase 8 Technical + Impact + Feasibility Intelligence Engine artifacts...');
   const { SpecialistEvaluationController } = await import('../controllers/specialistEvaluationController');
   for (const p of sampleProjects) {
     await SpecialistEvaluationController.buildContextAndAnalyze(`eval_${p.id}`);
   }
 
   // --- Seed Phase 9: AI Jury + Master Scoring Engine ---
-  console.log('  ⚖️ Seeding Phase 9 AI Jury + Master Scoring Engine artifacts...');
+  seedLogger.info('  ⚖️ Seeding Phase 9 AI Jury + Master Scoring Engine artifacts...');
   const { MasterScoringEngine } = await import('../scoring/masterScoringEngine');
   const { JuryRepository } = await import('../repositories/juryRepository');
   const {
@@ -886,7 +981,7 @@ export async function seedDatabase(): Promise<void> {
   });
 
   // --- Seed Phase 10: Final Intelligence Report + Evidence Explorer ---
-  console.log('  📑 Seeding Phase 10 Final Intelligence Report + Evidence Explorer artifacts...');
+  seedLogger.info('  📑 Seeding Phase 10 Final Intelligence Report + Evidence Explorer artifacts...');
   const { ReportEngine } = await import('../report/reportEngine');
   const { ReportRepository } = await import('../repositories/reportRepository');
 
@@ -1039,13 +1134,13 @@ export async function seedDatabase(): Promise<void> {
     'Senior Transportation Auditor'
   );
 
-  console.log(`✅ Database successfully seeded with Phase 1-12 end-to-end integration artifacts.`);
+  seedLogger.info('✅ Database successfully seeded with Phase 1-12 end-to-end integration artifacts.');
 }
 
 // Run seed if executed directly
 if (process.argv[1]?.includes('seed.ts')) {
   seedDatabase().catch(err => {
-    console.error('❌ Database seed error:', err);
+    seedLogger.error('❌ Database seed error', { error: err });
     process.exit(1);
   });
 }

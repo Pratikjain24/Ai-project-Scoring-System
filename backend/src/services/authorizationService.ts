@@ -30,14 +30,14 @@ export class AuthorizationService {
    * Verify if user has permission to access a project
    */
   static canAccessProject(context: AuthContext, projectId: string): boolean {
-    if (context.role === 'ADMIN' || context.role === 'REVIEWER') {
+    if (['ADMIN', 'REVIEWER', 'LEAD_REVIEWER', 'JUROR', 'EVALUATOR'].includes(context.role)) {
       return true;
     }
 
     const project = ProjectRepository.findById(projectId);
     if (!project) return false;
 
-    // Standard user may only access their own project
+    // Student or project owner may only access their own project
     return !project.ownerId || project.ownerId === context.userId;
   }
 
@@ -45,7 +45,7 @@ export class AuthorizationService {
    * Verify if user can access an evaluation
    */
   static canAccessEvaluation(context: AuthContext, evaluationId: string): boolean {
-    if (context.role === 'ADMIN' || context.role === 'REVIEWER') {
+    if (['ADMIN', 'REVIEWER', 'LEAD_REVIEWER', 'JUROR', 'EVALUATOR'].includes(context.role)) {
       return true;
     }
 
@@ -59,7 +59,7 @@ export class AuthorizationService {
    * Verify if user can finalize an evaluation or change rubric scores
    */
   static canFinalizeEvaluation(context: AuthContext): boolean {
-    return context.role === 'ADMIN' || context.role === 'REVIEWER';
+    return ['ADMIN', 'REVIEWER', 'LEAD_REVIEWER', 'JUROR', 'EVALUATOR'].includes(context.role);
   }
 
   /**

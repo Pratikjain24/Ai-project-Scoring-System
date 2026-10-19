@@ -26,7 +26,7 @@ export function validateBody(schema: ZodSchema) {
 export const CreateProjectSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(2, 'Project name must be at least 2 characters'),
-  architectureType: z.enum(['SOFTWARE', 'HARDWARE']),
+  architectureType: z.enum(['SOFTWARE', 'HARDWARE', 'HYBRID', 'BIOMEDICAL']),
   category: z.string().min(2),
   domain: z.string().min(2),
   tagline: z.string().optional(),
