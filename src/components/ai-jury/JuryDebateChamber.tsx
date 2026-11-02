@@ -16,7 +16,8 @@ import {
   ArrowRight,
   GitBranch,
   Zap,
-  Info
+  Info,
+  Cpu
 } from 'lucide-react';
 import { api } from '../../services/api';
 
@@ -30,13 +31,19 @@ export interface JurorTurnPosition {
   keyStrengths: string[];
   keyReservations: string[];
   evidenceCitations: string[];
+  llmArchitecture?: string;
+  modelId?: string;
+  providerName?: string;
+  specializedDomain?: string;
 }
 
 export interface InterJurorCritique {
   challengerId: string;
   challengerName: string;
+  challengerModel?: string;
   targetJurorId: string;
   targetJurorName: string;
+  targetModel?: string;
   critiqueDimension: string;
   argument: string;
   counterEvidence: string;
@@ -63,6 +70,9 @@ export interface DissentingOpinion {
   consensusVariance: number;
   dissentRationale: string;
   dissentSeverity: string;
+  llmArchitecture?: string;
+  modelId?: string;
+  specializedDomain?: string;
 }
 
 export interface JuryDebateData {
@@ -88,46 +98,95 @@ interface JuryDebateChamberProps {
   projectName?: string;
 }
 
-const PERSONA_DETAILS: Record<string, { role: string; focus: string; avatar: string; color: string; border: string; bg: string }> = {
+const PERSONA_DETAILS: Record<string, {
+  jurorNumber: number;
+  jurorIndex: string;
+  role: string;
+  focus: string;
+  avatar: string;
+  color: string;
+  border: string;
+  bg: string;
+  modelBadge: string;
+  modelId: string;
+  provider: string;
+  domain: string;
+  badgeClass: string;
+}> = {
   persona_architect: {
+    jurorNumber: 1,
+    jurorIndex: 'Juror 1',
     role: 'Chief Systems Architect & Security Auditor',
     focus: 'AST Complexity, Cyclomatic Depth & Edge Compute',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
     color: 'text-amber-400',
     border: 'border-amber-500/40',
-    bg: 'bg-amber-950/20'
-  },
-  persona_academic: {
-    role: 'Research Novelty & Prior Art Chair',
-    focus: 'SOTA Baselines, Semantic Delta & Validation Rigor',
-    avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=200',
-    color: 'text-indigo-400',
-    border: 'border-indigo-500/40',
-    bg: 'bg-indigo-950/20'
+    bg: 'bg-amber-950/20',
+    modelBadge: 'Claude 3.5 Sonnet',
+    modelId: 'claude-3-5-sonnet-20241022',
+    provider: 'Anthropic',
+    domain: 'Code & Security',
+    badgeClass: 'bg-amber-500/10 text-amber-300 border-amber-500/30'
   },
   persona_verifier: {
+    jurorNumber: 2,
+    jurorIndex: 'Juror 2',
     role: 'Empirical Evidence & Dynamic Verification Lead',
     focus: 'Docker Sandboxes, Unit Test Suites & SLAs',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
     color: 'text-emerald-400',
     border: 'border-emerald-500/40',
-    bg: 'bg-emerald-950/20'
+    bg: 'bg-emerald-950/20',
+    modelBadge: 'GPT-4o',
+    modelId: 'gpt-4o-2024-08-06',
+    provider: 'OpenAI',
+    domain: 'Impact & Feasibility',
+    badgeClass: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
   },
   persona_presentation: {
+    jurorNumber: 3,
+    jurorIndex: 'Juror 3',
     role: 'Multimodal Video & Presentation Forensicist',
     focus: 'Vocal Inflection, Pitch Tracking & Slide Dwell Pacing',
     avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=200',
     color: 'text-pink-400',
     border: 'border-pink-500/40',
-    bg: 'bg-pink-950/20'
+    bg: 'bg-pink-950/20',
+    modelBadge: 'Gemini 1.5 Pro',
+    modelId: 'gemini-1.5-pro',
+    provider: 'Google Gemini',
+    domain: 'Multimodal Video',
+    badgeClass: 'bg-pink-500/10 text-pink-300 border-pink-500/30'
+  },
+  persona_academic: {
+    jurorNumber: 4,
+    jurorIndex: 'Juror 4',
+    role: 'Research Novelty & Prior Art Chair',
+    focus: 'SOTA Baselines, Semantic Delta & Validation Rigor',
+    avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=200',
+    color: 'text-indigo-400',
+    border: 'border-indigo-500/40',
+    bg: 'bg-indigo-950/20',
+    modelBadge: 'Claude 3.5 Haiku',
+    modelId: 'claude-3-5-haiku-20241022',
+    provider: 'Anthropic',
+    domain: 'Research Novelty',
+    badgeClass: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30'
   },
   persona_chair: {
+    jurorNumber: 5,
+    jurorIndex: 'Juror 5',
     role: 'AI Deliberation Chair & Rubric Arbitrator',
     focus: 'Consensus Calibration & Verdict Governance',
     avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=200',
     color: 'text-cyan-400',
     border: 'border-cyan-500/40',
-    bg: 'bg-cyan-950/20'
+    bg: 'bg-cyan-950/20',
+    modelBadge: 'Consensus Ensemble',
+    modelId: 'ensemble-arbitrator-v1',
+    provider: 'Consensus Ensemble',
+    domain: 'Rubric Arbitration',
+    badgeClass: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30'
   }
 };
 
@@ -469,13 +528,17 @@ export const JuryDebateChamber: React.FC<JuryDebateChamberProps> = ({
         
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="px-3 py-1 rounded-full text-[11px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-500/30 flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
                 Phase 9/11 Engine
               </span>
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-500/30">
                 100% 🟢 Complete
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono bg-purple-950 text-purple-300 border border-purple-500/30 flex items-center gap-1">
+                <Cpu className="w-3 h-3 text-purple-400" />
+                Multi-Model Diversity: Claude 3.5 + GPT-4o + Gemini 1.5
               </span>
               <span className="text-xs font-mono text-slate-400">
                 Protocol: 3-Turn Adversarial Cross-Examination
@@ -572,6 +635,17 @@ export const JuryDebateChamber: React.FC<JuryDebateChamberProps> = ({
                     <span className={`text-[10px] font-mono font-medium block truncate ${details.color}`}>
                       {details.role}
                     </span>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      <span className="px-1.5 py-0.2 rounded text-[8.5px] font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700/60">
+                        {details.jurorIndex}
+                      </span>
+                      <span className={`px-1.5 py-0.2 rounded text-[8.5px] font-mono font-semibold border ${details.badgeClass}`}>
+                        {details.modelBadge}
+                      </span>
+                      <span className="text-[8px] font-mono text-slate-400">
+                        ({details.domain})
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -719,7 +793,12 @@ export const JuryDebateChamber: React.FC<JuryDebateChamberProps> = ({
                         className="w-8 h-8 rounded-lg object-cover border border-slate-700" 
                       />
                       <div>
-                        <div className="text-xs font-bold text-slate-200">{critique.challengerName}</div>
+                        <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                          {critique.challengerName}
+                          <span className={`px-1 py-0.2 rounded text-[8px] font-mono border ${challenger?.badgeClass}`}>
+                            {critique.challengerModel || challenger?.modelBadge}
+                          </span>
+                        </div>
                         <div className={`text-[10px] font-mono ${challenger?.color}`}>{challenger?.role}</div>
                       </div>
                     </div>
@@ -727,6 +806,9 @@ export const JuryDebateChamber: React.FC<JuryDebateChamberProps> = ({
                     <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 font-mono text-[11px]">
                       <ArrowRight className="w-3.5 h-3.5 text-cyan-400" />
                       <span className="text-slate-300 font-semibold">{critique.targetJurorName}</span>
+                      <span className={`px-1 py-0.2 rounded text-[8px] font-mono border ${PERSONA_DETAILS[critique.targetJurorId]?.badgeClass}`}>
+                        {critique.targetModel || PERSONA_DETAILS[critique.targetJurorId]?.modelBadge}
+                      </span>
                     </div>
                   </div>
 
@@ -819,6 +901,11 @@ export const JuryDebateChamber: React.FC<JuryDebateChamberProps> = ({
                       <div>
                         <h4 className="text-xs font-bold text-slate-100">{pos.jurorName}</h4>
                         <span className={`text-[10px] font-mono ${details?.color}`}>{details?.role}</span>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className={`px-1.5 py-0.2 rounded text-[8.5px] font-mono font-semibold border ${details?.badgeClass}`}>
+                            {pos.llmArchitecture || details?.modelBadge}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
@@ -898,9 +985,14 @@ export const JuryDebateChamber: React.FC<JuryDebateChamberProps> = ({
                 className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 space-y-1.5"
               >
                 <div className="flex items-center justify-between text-xs font-mono">
-                  <span className="font-bold text-slate-200">
-                    {dissent.jurorName} (Variance: {dissent.consensusVariance > 0 ? `+${dissent.consensusVariance}` : dissent.consensusVariance} pts)
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-200">
+                      {dissent.jurorName} (Variance: {dissent.consensusVariance > 0 ? `+${dissent.consensusVariance}` : dissent.consensusVariance} pts)
+                    </span>
+                    <span className={`px-1.5 py-0.2 rounded text-[8.5px] font-mono border ${PERSONA_DETAILS[dissent.jurorId]?.badgeClass}`}>
+                      {dissent.llmArchitecture || PERSONA_DETAILS[dissent.jurorId]?.modelBadge}
+                    </span>
+                  </div>
                   <span className="text-amber-400 font-bold">
                     Severity: {dissent.dissentSeverity}
                   </span>

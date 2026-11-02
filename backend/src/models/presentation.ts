@@ -52,6 +52,35 @@ export interface SpectralMetrics {
 
 export type VocalEmotionState = 'CONFIDENT_ENGAGED' | 'CALM_COMPOSED' | 'NERVOUS_HESITANT' | 'MONOTONE_FATIGUED';
 
+export interface SpeakerDiarizationProfile {
+  speakerId: string;
+  speakerLabel: string;
+  totalSpeakingSeconds: number;
+  speakingSharePercentage: number;
+  segmentsCount: number;
+  wordsCount: number;
+  wpm: number;
+  averagePitchHz?: number;
+  confidenceScore: number;
+  attributedClaimIds?: string[];
+}
+
+export interface DetailedSpeakerDiarization {
+  estimatedSpeakers: number;
+  primarySpeakerDominancePercentage: number;
+  speakingBalanceScore: number; // 0 - 100
+  isBalancedPresentation: boolean;
+  dominantSpeakerId: string;
+  turnsCount: number;
+  speakers: SpeakerDiarizationProfile[];
+  noiseMetrics?: {
+    estimatedSnrDb: number;
+    backgroundNoiseLevelDbFS: number;
+    speechClarityScore: number;
+    noiseSuppressionRecommended: boolean;
+  };
+}
+
 export interface AcousticForensicsReport {
   engineMode: 'LIBROSA' | 'WEBRTC_VAD' | 'NATIVE_PCM_DSP';
   analyzedDurationSeconds: number;
@@ -61,10 +90,7 @@ export interface AcousticForensicsReport {
   pauses: AcousticPauseMetrics;
   spectral: SpectralMetrics;
   vocalEmotionState?: VocalEmotionState;
-  speakerDiarization?: {
-    estimatedSpeakers: number;
-    primarySpeakerDominancePercentage: number;
-  };
+  speakerDiarization?: DetailedSpeakerDiarization;
   overallDeliveryScore: number;
   diagnosticFindings: string[];
 }

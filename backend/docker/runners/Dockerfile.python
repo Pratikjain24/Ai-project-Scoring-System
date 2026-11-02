@@ -1,0 +1,39 @@
+# ==============================================================================
+# PROJECTX-RAY AI — MULTI-LANGUAGE SANDBOX RUNNER: PYTHON 3.11
+# Image Tag: runner-python:3.11
+# Security: Non-root user (10001), noexec /tmp, unbuffered execution, no network
+# Enforced Limits: --memory 256m, --cpus 1.0, --network none, --read-only
+# ==============================================================================
+
+FROM python:3.11-alpine
+
+LABEL org.opencontainers.image.title="ProjectX-Ray AI Python 3.11 Sandbox Runner" \
+      org.opencontainers.image.description="Hardened, isolated sandbox container for Python capstone code verification" \
+      org.opencontainers.image.version="3.11" \
+      org.projectxray.runner="runner-python:3.11"
+
+# Install minimal build deps and standard test libraries
+RUN apk add --no-cache gcc musl-dev linux-headers && \
+    pip install --no-cache-dir pytest==8.0.0 numpy==1.26.4 && \
+    apk del gcc musl-dev linux-headers && \
+    rm -rf /root/.cache
+
+# Create unprivileged sandbox user
+RUN addgroup -g 10001 -S sandboxgroup && \
+    adduser -u 10001 -S sandboxuser -G sandboxgroup -h /home/sandboxuser
+
+# Set working directory and grant unprivileged ownership
+WORKDIR /workspace
+RUN chown -R sandboxuser:sandboxgroup /workspace
+
+# Environment hardening
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HOME=/home/sandboxuser
+
+USER sandboxuser
+
+ENTRYPOINT ["python"]
+CMD ["test_runner.py"]
+

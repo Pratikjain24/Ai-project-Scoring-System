@@ -166,6 +166,9 @@ export class DocumentParser {
     if (buffer && buffer.length > 0) {
       if (BinaryPdfParser.isPdf(buffer) || fileName.toLowerCase().endsWith('.pdf') || mimeType.includes('pdf')) {
         try {
+          if (buffer.length > 3 * 1024 * 1024) {
+            return await BinaryPdfParser.parsePdfStreamed(buffer, documentId);
+          }
           return await BinaryPdfParser.parsePdfAsync(buffer, documentId);
         } catch {
           // fall through
@@ -182,6 +185,29 @@ export class DocumentParser {
     }
 
     return this.parse(documentId, fileName, mimeType, rawContentOrPath);
+  }
+
+  /**
+   * Paged disk streaming parser for large multi-page or scanned PDFs (80+ pages).
+   * Spools pages to temporary disk files, throttling OCR to max 2 workers with active memory guards.
+   */
+  static async parseStreamed(
+    documentId: string,
+    fileName: string,
+    mimeType: string,
+    rawContentOrPath?: string | Buffer,
+    options?: import('./pagedPdfStreamer').PagedStreamOptions
+  ): Promise<ParsedDocumentUnit> {
+    let buffer: Buffer | null = null;
+    if (Buffer.isBuffer(rawContentOrPath)) {
+      buffer = rawContentOrPath;
+    } else if (typeof rawContentOrPath === 'string' && fs.existsSync(rawContentOrPath)) {
+      buffer = fs.readFileSync(rawContentOrPath);
+    }
+    if (buffer && BinaryPdfParser.isPdf(buffer)) {
+      return BinaryPdfParser.parsePdfStreamed(buffer, documentId, options);
+    }
+    return this.parseAsync(documentId, fileName, mimeType, rawContentOrPath);
   }
 
   /**

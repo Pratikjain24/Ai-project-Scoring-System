@@ -15,6 +15,10 @@ import {
   VectorEmbeddingService,
   type VectorDatabaseStatus,
 } from './vectorResearchCache';
+import {
+  AcademicVectorRepository,
+  type AcademicRepositoryStatus,
+} from './academicVectorRepository';
 import { createModuleLogger } from '../utils/logger';
 
 const logger = createModuleLogger('LiveResearchEngine');
@@ -28,6 +32,7 @@ export interface LiveResearchEngineStatus {
     arxiv: boolean;
   };
   vectorCache: VectorDatabaseStatus;
+  hnswRepository?: AcademicRepositoryStatus;
   fallbackResilienceActive: boolean;
 }
 
@@ -94,9 +99,18 @@ export class LiveResearchEngine {
         logger.warn('Academic federation search error, activating resilient synthesis', { error: err.message });
       }
 
-      // 3. Fallback to resilient domain baseline papers if network is restricted
+      // 3. Fallback to Pre-Indexed HNSW Vector Repository (or resilient domain baseline papers)
       if (papers.length === 0) {
-        papers = this.generateResilientBaselinePapers(project);
+        const hnswLookup = AcademicVectorRepository.getInstance().lookupPriorArt(query, { topK: 3 });
+        if (hnswLookup.matches && hnswLookup.matches.length > 0) {
+          papers = hnswLookup.matches.map(m => m.paper);
+          logger.info('Retrieved prior-art papers from Pre-Indexed HNSW Vector Repository', {
+            matchesCount: papers.length,
+            topSimilarity: hnswLookup.topSimilarity,
+          });
+        } else {
+          papers = this.generateResilientBaselinePapers(project);
+        }
       }
 
       // 4. Store retrieved papers in Vector Cache
@@ -263,6 +277,7 @@ export class LiveResearchEngine {
         arxiv: true,
       },
       vectorCache: this.vectorCache.getStatus(),
+      hnswRepository: AcademicVectorRepository.getInstance().getStatus(),
       fallbackResilienceActive: true,
     };
   }

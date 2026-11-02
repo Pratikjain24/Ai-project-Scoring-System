@@ -66,6 +66,8 @@ export const ENV = {
   REDIS_DB: parseInt(process.env.REDIS_DB || '0', 10),
   PIPELINE_CONCURRENCY: parseInt(process.env.PIPELINE_CONCURRENCY || '2', 10),
   QUEUE_NAME: process.env.QUEUE_NAME || 'evaluation-pipeline-queue',
+  APP_ROLE: (process.env.APP_ROLE || process.env.ROLE || 'all') as 'all' | 'api' | 'worker',
+  WORKER_PORT: parseInt(process.env.WORKER_PORT || '3002', 10),
 
   // Rate Limiting (Redis-backed via rate-limiter-flexible)
   RATE_LIMIT_WINDOW_MS: parseInt(process.env.RATE_LIMIT_WINDOW_MS || String(15 * 60 * 1000), 10),

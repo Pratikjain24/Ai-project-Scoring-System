@@ -1148,6 +1148,15 @@ export class ApiService {
     );
   }
 
+  async getLiveRecentTelemetry(
+    evaluationId: string,
+    limit: number = 50
+  ): Promise<{ sessionId: string; count: number; stats: any; summary?: any; items: LivePresenterTrackingMetrics[] } | null> {
+    return this.request<{ sessionId: string; count: number; stats: any; summary?: any; items: LivePresenterTrackingMetrics[] } | null>(
+      `/evaluations/${evaluationId}/live/telemetry/recent?limit=${limit}`
+    );
+  }
+
   // ==========================================
   // Orchestrator & State Machine
   // ==========================================
@@ -1319,6 +1328,24 @@ export class ApiService {
 
   async getHealth(): Promise<{ status: string; mockMode: boolean }> {
     return this.request<{ status: string; mockMode: boolean }>('/health');
+  }
+
+  async getHnswVectorStatus(): Promise<any> {
+    return this.request<any>('/admin/research-intelligence/hnsw-status');
+  }
+
+  async searchHnswPriorArt(query: string, options?: { topK?: number; threshold?: number }): Promise<any> {
+    return this.request<any>('/admin/research-intelligence/hnsw-search', {
+      method: 'POST',
+      body: JSON.stringify({ query, ...options }),
+    });
+  }
+
+  async populateHnswCorpus(count?: number): Promise<any> {
+    return this.request<any>('/admin/research-intelligence/hnsw-populate', {
+      method: 'POST',
+      body: JSON.stringify({ count: count || 1000 }),
+    });
   }
 
   async checkConnection(): Promise<boolean> {

@@ -29,6 +29,9 @@ adminRoutes.get('/technical-auditor', AdminController.getTechnicalAuditorStatus)
 adminRoutes.post('/technical-auditor/scan', AdminController.scanCodeSnippet);
 adminRoutes.get('/research-intelligence', AdminController.getResearchStatus);
 adminRoutes.post('/research-intelligence/search', AdminController.searchAcademicResearch);
+adminRoutes.get('/research-intelligence/hnsw-status', AdminController.getHnswStatus);
+adminRoutes.post('/research-intelligence/hnsw-search', AdminController.searchHnswPriorArt);
+adminRoutes.post('/research-intelligence/hnsw-populate', AdminController.populateHnswRepository);
 adminRoutes.get('/originality-intelligence', AdminController.getOriginalityStatus);
 adminRoutes.post('/originality-intelligence/compare', AdminController.compareOriginality);
 adminRoutes.get('/claim-verification/sandbox-status', AdminController.getClaimSandboxStatus);
@@ -43,5 +46,7 @@ adminRoutes.get('/auth/blacklist', AdminController.getTokenBlacklistStatus);
 adminRoutes.post('/auth/revoke-token', AdminController.revokeToken);
 adminRoutes.get('/storage/status', AdminController.getStorageStatus);
 adminRoutes.post('/storage/switch-driver', AdminController.switchStorageDriver);
+adminRoutes.get('/worker-pool/status', AdminController.getWorkerPoolStatus);
+adminRoutes.get('/queue/metrics', AdminController.getWorkerPoolStatus);
 
 

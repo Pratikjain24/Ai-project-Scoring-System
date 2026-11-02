@@ -287,4 +287,33 @@ export class LiveJuryController {
       res.status(500).json({ success: false, error: err.message });
     }
   };
+
+  getRecentTelemetry = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+      const session = this.repo.getSessionByEvaluation(id);
+      if (!session) {
+        res.status(404).json({ success: false, error: 'Live session not found' });
+        return;
+      }
+
+      const recent = this.engine.getRecentVisualTelemetry(session.id, limit);
+      const stats = this.engine.getTelemetryBufferStats(session.id);
+      const summary = this.engine.getPresenterTelemetrySummary(session.id);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          sessionId: session.id,
+          count: recent.length,
+          stats: stats || { size: 0, capacity: LiveJuryEngine.MAX_TELEMETRY_BUFFER_SIZE, totalPushed: 0, evictedCount: 0 },
+          summary,
+          items: recent
+        }
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  };
 }

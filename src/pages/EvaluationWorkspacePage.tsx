@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   Sparkles,
@@ -38,6 +38,7 @@ import { OverviewRadarChart } from '../components/evaluation/OverviewRadarChart'
 import { MOCK_EVALUATIONS } from '../data/mockEvaluationsList';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useOrchestratorStatusQuery } from '../hooks/useQueries';
 import { ApiErrorAlert } from '../components/ui/ApiErrorAlert';
 
 // Existing deep modules
@@ -253,10 +254,72 @@ export const EvaluationWorkspacePage: React.FC = () => {
   const [isReviewDrawerOpen, setIsReviewDrawerOpen] = useState(false);
   const [pipelineProgress, setPipelineProgress] = useState<OrchestratorProgress | null>(null);
   const [isSseActive, setIsSseActive] = useState<boolean>(false);
+  const [isSseSilent, setIsSseSilent] = useState<boolean>(false);
+  const lastHeartbeatTimestampRef = useRef<number>(0);
 
   const fetchPipelineProgress = React.useCallback(() => {
     api.getOrchestratorStatus(evalId).then(setPipelineProgress).catch(() => {});
   }, [evalId]);
+
+  // Fallback TanStack Query Polling Reconciliation Probe Condition:
+  // Active when pipeline is running and either:
+  // 1. Stage progress reaches >= 90% (e.g. Stage 14/15 93% transition)
+  // 2. SSE heartbeats cease for >12s
+  // 3. SSE connection is completely dropped / inactive
+  const isPipelineActive = Boolean(pipelineProgress && !pipelineProgress.isCompleted);
+  const isNearCompletion = Boolean(
+    pipelineProgress &&
+    !pipelineProgress.isCompleted &&
+    (pipelineProgress.percentage >= 90 || pipelineProgress.completedStages >= 13)
+  );
+  const isHeartbeatStalled = isSseSilent || !isSseActive;
+  const isReconciliationProbeActive = isPipelineActive && (isNearCompletion || isHeartbeatStalled);
+
+  // TanStack Query Polling Reconciliation Probe
+  const { data: probedOrchestratorProgress } = useOrchestratorStatusQuery(evalId, {
+    enabled: Boolean(evalId && isReconciliationProbeActive),
+    refetchInterval: isReconciliationProbeActive ? 2500 : false,
+  });
+
+  // Reconcile probed status into local state & refresh completed data
+  React.useEffect(() => {
+    if (!probedOrchestratorProgress) return;
+
+    queueMicrotask(() => {
+      // 1. Handle pipeline completion detected via fallback probe
+      if (
+        probedOrchestratorProgress.isCompleted ||
+        probedOrchestratorProgress.currentState === 'FINAL' ||
+        probedOrchestratorProgress.currentState === 'READY_FOR_REVIEW' ||
+        probedOrchestratorProgress.completedStages >= (probedOrchestratorProgress.totalStages || 15)
+      ) {
+        console.log('[SSE Reconciliation Probe] ✅ Pipeline completion verified via TanStack Query probe.');
+        setPipelineProgress((prev) => {
+          if (prev?.isCompleted) return prev;
+          return {
+            ...probedOrchestratorProgress,
+            isCompleted: true,
+            percentage: 100,
+          };
+        });
+        loadData();
+        return;
+      }
+
+      // 2. Advance local pipeline progress if probed state is newer
+      setPipelineProgress((prev) => {
+        if (!prev) return probedOrchestratorProgress;
+        if (
+          probedOrchestratorProgress.percentage > prev.percentage ||
+          probedOrchestratorProgress.completedStages > prev.completedStages ||
+          probedOrchestratorProgress.currentState !== prev.currentState
+        ) {
+          return probedOrchestratorProgress;
+        }
+        return prev;
+      });
+    });
+  }, [probedOrchestratorProgress, loadData]);
 
   // Real-time Pipeline Progress via Server-Sent Events (SSE)
   React.useEffect(() => {
@@ -267,6 +330,15 @@ export const EvaluationWorkspacePage: React.FC = () => {
 
     // Initial state snapshot
     fetchPipelineProgress();
+
+    // 12-second SSE heartbeat watchdog to detect silent connection stalls
+    const heartbeatWatchdog = setInterval(() => {
+      if (!isMounted) return;
+      const elapsed = Date.now() - lastHeartbeatTimestampRef.current;
+      if (elapsed > 12000) {
+        setIsSseSilent(true);
+      }
+    }, 2000);
 
     const stopFallback = () => {
       if (fallbackInterval) {
@@ -300,16 +372,25 @@ export const EvaluationWorkspacePage: React.FC = () => {
         es.onopen = () => {
           if (!isMounted) return;
           setIsSseActive(true);
+          setIsSseSilent(false);
+          lastHeartbeatTimestampRef.current = Date.now();
           stopFallback();
         };
 
         es.onmessage = (event) => {
           if (!isMounted) return;
           setIsSseActive(true);
+          setIsSseSilent(false);
+          lastHeartbeatTimestampRef.current = Date.now();
           stopFallback();
 
           try {
             const data = JSON.parse(event.data);
+
+            if (data.type === 'HEARTBEAT') {
+              // Valid keep-alive heartbeat pulse acknowledged
+              return;
+            }
 
             if (data.orchestratorProgress) {
               setPipelineProgress(data.orchestratorProgress);
@@ -330,6 +411,7 @@ export const EvaluationWorkspacePage: React.FC = () => {
         es.onerror = () => {
           if (!isMounted) return;
           setIsSseActive(false);
+          setIsSseSilent(true);
           if (eventSource) {
             eventSource.close();
             eventSource = null;
@@ -341,6 +423,7 @@ export const EvaluationWorkspacePage: React.FC = () => {
         };
       } catch {
         setIsSseActive(false);
+        setIsSseSilent(true);
         startFallback();
         reconnectTimeout = setTimeout(connectSse, 5000);
       }
@@ -350,6 +433,7 @@ export const EvaluationWorkspacePage: React.FC = () => {
 
     return () => {
       isMounted = false;
+      clearInterval(heartbeatWatchdog);
       if (eventSource) {
         eventSource.close();
         eventSource = null;
@@ -512,11 +596,38 @@ export const EvaluationWorkspacePage: React.FC = () => {
             {/* Actions */}
             <div className="flex items-center gap-2 flex-wrap">
               <div
-                title={isSseActive ? 'Real-time Server-Sent Events stream active' : 'Connecting to SSE pipeline stream...'}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono border bg-slate-900/90 border-slate-800 text-slate-300 shadow-sm"
+                data-testid="sse-status-badge"
+                title={
+                  isReconciliationProbeActive
+                    ? `TanStack Query Reconciliation Probe Active (${pipelineProgress?.percentage ?? 0}% progress / ${isSseSilent ? 'SSE silence >12s' : 'Stage >90%'})`
+                    : isSseActive
+                    ? 'Real-time Server-Sent Events stream active'
+                    : 'Connecting to SSE pipeline stream...'
+                }
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono border transition-all ${
+                  isReconciliationProbeActive
+                    ? 'bg-amber-500/10 border-amber-500/40 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.25)]'
+                    : isSseActive
+                    ? 'bg-slate-900/90 border-slate-800 text-slate-300'
+                    : 'bg-slate-900/90 border-slate-800 text-slate-400'
+                }`}
               >
-                <span className={`w-2 h-2 rounded-full ${isSseActive ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-amber-400'}`} />
-                <span className="text-[10px] tracking-wide font-medium">{isSseActive ? 'SSE LIVE' : 'SYNCING'}</span>
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isReconciliationProbeActive
+                      ? 'bg-amber-400 animate-ping'
+                      : isSseActive
+                      ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]'
+                      : 'bg-amber-400'
+                  }`}
+                />
+                <span className="text-[10px] tracking-wide font-medium">
+                  {isReconciliationProbeActive
+                    ? `PROBE ACTIVE (${pipelineProgress?.percentage ?? 0}%)`
+                    : isSseActive
+                    ? 'SSE LIVE'
+                    : 'SYNCING'}
+                </span>
               </div>
 
               <Button

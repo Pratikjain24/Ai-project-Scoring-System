@@ -15,6 +15,7 @@ import { getDriverStatus, testDatabaseConnection, MigrationEngine, getConcurrenc
 import { TechnicalQualityAgent } from '../agents/technicalQualityAgent';
 import { ResearchAgent } from '../agents/researchAgent';
 import { LiveResearchEngine } from '../research-intelligence/liveResearchEngine';
+import { AcademicVectorRepository } from '../research-intelligence/academicVectorRepository';
 import { OriginalityAgent } from '../agents/originalityAgent';
 import { SemanticOriginalityEngine } from '../originality-intelligence/semanticOriginalityEngine';
 import { ClaimVerificationAgent } from '../agents/claimVerificationAgent';
@@ -27,6 +28,7 @@ import type { LivePresenterTrackingMetrics } from '../models/liveJury';
 import { JuryDeliberationAgent } from '../agents/juryDeliberationAgent';
 import { TokenBlacklistService } from '../services/tokenBlacklistService';
 import { StorageService } from '../services/storageService';
+import { pipelineQueue } from '../pipeline/pipelineQueue';
 
 export class AdminController {
   /**
@@ -527,6 +529,82 @@ export class AdminController {
   }
 
   /**
+   * Pre-Indexed HNSW Academic Vector Repository Telemetry & Graph Metrics
+   */
+  static getHnswStatus(_req: Request, res: Response): void {
+    try {
+      const repo = AcademicVectorRepository.getInstance();
+      const status = repo.getStatus();
+      res.status(200).json({
+        success: true,
+        data: status,
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'HNSW_STATUS_FAILED', message: err?.message || 'Failed to get HNSW vector status' },
+      });
+    }
+  }
+
+  /**
+   * Sub-millisecond HNSW Nearest-Neighbor Prior-Art Search (Rate Limit Shield)
+   */
+  static searchHnswPriorArt(req: Request, res: Response): void {
+    const { query, topK, threshold, efSearch } = req.body || {};
+    if (!query) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'QUERY_REQUIRED', message: 'Search query is required' },
+      });
+      return;
+    }
+
+    try {
+      const repo = AcademicVectorRepository.getInstance();
+      const result = repo.lookupPriorArt(query, {
+        topK: topK ? parseInt(topK, 10) : 5,
+        threshold: threshold ? parseFloat(threshold) : 0.65,
+        efSearch: efSearch ? parseInt(efSearch, 10) : 32,
+      });
+
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'HNSW_SEARCH_FAILED', message: err?.message || 'Failed to search HNSW index' },
+      });
+    }
+  }
+
+  /**
+   * Populate / Scale Pre-Indexed Academic Vector Repository with Synthetic CS Capstones
+   */
+  static populateHnswRepository(req: Request, res: Response): void {
+    const { count } = req.body || {};
+    const targetCount = count ? parseInt(count, 10) : 1000;
+
+    try {
+      const repo = AcademicVectorRepository.getInstance();
+      const result = repo.populateSyntheticCapstoneCorpus(targetCount);
+
+      res.status(200).json({
+        success: true,
+        message: `Successfully populated ${result.indexedCount} papers in ${result.elapsedMs}ms`,
+        data: result,
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'HNSW_POPULATE_FAILED', message: err?.message || 'Failed to populate HNSW corpus' },
+      });
+    }
+  }
+
+  /**
    * Originality & Novelty Embedding Engine Telemetry (all-MiniLM-L6-v2)
    */
   static getOriginalityStatus(_req: Request, res: Response): void {
@@ -716,6 +794,12 @@ export class AdminController {
           supportedResolutions: ['1920x1080', '1280x720', '640x480'],
           targetFps: 30,
           inferenceLatencyMs: 16.8,
+          telemetryBuffer: {
+            activeSessions: engine.getActiveTelemetrySessionCount(),
+            totalBufferedFrames: engine.getTotalBufferedFrames(),
+            maxBufferSizePerSession: LiveJuryEngine.MAX_TELEMETRY_BUFFER_SIZE,
+            evictionPolicy: 'FIFO_SLIDING_WINDOW'
+          },
           timestamp: new Date().toISOString()
         }
       });
@@ -919,6 +1003,37 @@ export class AdminController {
       res.status(500).json({
         success: false,
         error: { code: 'DRIVER_SWITCH_FAILED', message: err?.message || 'Failed to switch storage driver' }
+      });
+    }
+  }
+
+  /**
+   * Worker Pool & Queue Metrics status for Admin Dashboard & HPA monitoring
+   */
+  static async getWorkerPoolStatus(req: Request, res: Response): Promise<void> {
+    try {
+      const queueStatus = await pipelineQueue.getStatus();
+      const metrics = await pipelineQueue.getQueueMetrics();
+      res.status(200).json({
+        success: true,
+        data: {
+          role: pipelineQueue.getRole(),
+          queue: queueStatus,
+          metrics,
+          autoscaling: {
+            minReplicas: 2,
+            maxReplicas: 20,
+            targetQueueDepthPerPod: 5,
+            recommendedReplicas: metrics.recommendedWorkers,
+            hpaMetricName: 'bullmq_queue_waiting_jobs',
+          },
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { code: 'WORKER_POOL_STATUS_FAILED', message: err?.message || 'Failed to retrieve worker pool status' },
       });
     }
   }

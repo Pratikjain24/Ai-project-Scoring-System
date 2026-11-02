@@ -168,9 +168,9 @@ export class PresentationAgent {
     const updatedSuggestions = [...baseAnalysis.improvementSuggestions];
 
     for (const finding of acousticReport.diagnosticFindings) {
-      if (finding.includes('Expressive') || finding.includes('Strong Vocal')) {
+      if (finding.includes('Expressive') || finding.includes('Strong Vocal') || finding.includes('Balanced collaborative')) {
         updatedStrengths.push(finding);
-      } else if (finding.includes('Monotone') || finding.includes('Hesitation')) {
+      } else if (finding.includes('Monotone') || finding.includes('Hesitation') || finding.includes('Skewed distribution')) {
         updatedWeaknesses.push(finding);
       } else {
         updatedSuggestions.push(finding);

@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: projectxray-api-service
+  namespace: projectxray-system
+  labels:
+    app.kubernetes.io/name: projectxray-api-service
+    app.kubernetes.io/component: api-gateway
+    app.kubernetes.io/part-of: projectxray-ai
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: projectxray-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3001
+      protocol: TCP
+

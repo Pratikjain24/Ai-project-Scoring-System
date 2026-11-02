@@ -1,0 +1,30 @@
+# ==============================================================================
+# PROJECTX-RAY AI — MULTI-LANGUAGE SANDBOX RUNNER: NODE.JS 20
+# Image Tag: runner-node:20
+# Security: Non-root user (10001), restricted heap limits, no network
+# Enforced Limits: --memory 256m, --cpus 1.0, --network none, --read-only
+# ==============================================================================
+
+FROM node:20-alpine
+
+LABEL org.opencontainers.image.title="ProjectX-Ray AI Node.js 20 Sandbox Runner" \
+      org.opencontainers.image.description="Hardened, isolated sandbox container for Node.js/TypeScript capstone test execution" \
+      org.opencontainers.image.version="20" \
+      org.projectxray.runner="runner-node:20"
+
+# Create unprivileged sandbox user
+RUN addgroup -g 10001 -S sandboxgroup && \
+    adduser -u 10001 -S sandboxuser -G sandboxgroup -h /home/sandboxuser
+
+WORKDIR /workspace
+RUN chown -R sandboxuser:sandboxgroup /workspace
+
+ENV NODE_ENV=test \
+    NODE_OPTIONS="--max-old-space-size=192" \
+    HOME=/home/sandboxuser
+
+USER sandboxuser
+
+ENTRYPOINT ["node"]
+CMD ["test_runner.js"]
+

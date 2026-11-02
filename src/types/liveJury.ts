@@ -61,6 +61,55 @@ export type PresenterPostureStatus = 'UPRIGHT' | 'LEANING_FORWARD' | 'LEANING_BA
 export type GestureActivityLevel = 'LOW' | 'OPTIMAL' | 'EXCESSIVE';
 export type LightingQuality = 'GOOD' | 'TOO_DARK' | 'TOO_BRIGHT';
 
+export interface FaceMeshLandmarks {
+  forehead: { x: number; y: number; z?: number };
+  leftEye: { x: number; y: number; z?: number };
+  rightEye: { x: number; y: number; z?: number };
+  noseTip: { x: number; y: number; z?: number };
+  mouthCenter: { x: number; y: number; z?: number };
+  chin: { x: number; y: number; z?: number };
+}
+
+export interface BlazePoseKeypoints {
+  nose: { x: number; y: number };
+  leftShoulder: { x: number; y: number };
+  rightShoulder: { x: number; y: number };
+  leftElbow?: { x: number; y: number };
+  rightElbow?: { x: number; y: number };
+  leftWrist?: { x: number; y: number };
+  rightWrist?: { x: number; y: number };
+  torsoCentroid: { x: number; y: number };
+}
+
+export interface TrackedPresenterFace {
+  id: number;
+  isPrimary: boolean;
+  role: 'LEAD_PRESENTER' | 'CO_PRESENTER';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  centerX: number;
+  centerY: number;
+  gazeStatus: PresenterGazeStatus;
+  headPose: {
+    yaw: number;
+    pitch: number;
+    roll: number;
+    quaternion?: { w: number; x: number; y: number; z: number };
+  };
+  postureStatus: PresenterPostureStatus;
+  postureStability?: number;
+  eyeContactScore: number;
+  confidence: number;
+  trackAge: number;
+  timeSinceUpdate: number;
+  speakingConfidence?: number;
+  speakingSharePercent?: number;
+  landmarks?: FaceMeshLandmarks;
+  poseKeypoints?: BlazePoseKeypoints;
+}
+
 export interface LivePresenterTrackingMetrics {
   faceDetected: boolean;
   faceBoundingBox?: { x: number; y: number; width: number; height: number };
@@ -70,6 +119,7 @@ export interface LivePresenterTrackingMetrics {
     yaw: number;   // -90 to +90 (left/right)
     pitch: number; // -90 to +90 (up/down)
     roll: number;  // -90 to +90 (tilt)
+    quaternion?: { w: number; x: number; y: number; z: number };
   };
   postureStatus: PresenterPostureStatus;
   postureStability: number; // 0-100%
@@ -79,6 +129,12 @@ export interface LivePresenterTrackingMetrics {
   slideTransitionDetected: boolean;
   lightingQuality: LightingQuality;
   timestampMs: number;
+  // Multi-Presenter Tracking Enhancements
+  presenterCount?: number;
+  activePresenterId?: number;
+  trackedPresenters?: TrackedPresenterFace[];
+  speakingDistribution?: Record<number, number>; // Presenter ID -> Speaking percentage (0-100%)
+  teamSpeakingBalanceScore?: number; // 0-100 normalized Shannon entropy score
 }
 
 export interface LiveEvent {

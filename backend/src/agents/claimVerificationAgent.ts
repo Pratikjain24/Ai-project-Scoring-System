@@ -45,12 +45,13 @@ export class ClaimVerificationAgent {
   static async verifyClaimWithSandbox(
     claim: Claim,
     testCode?: string,
-    limits?: SandboxLimits
+    limits?: SandboxLimits,
+    runtime: ExecutionRuntime = 'nodejs'
   ): Promise<{ claim: Claim; executionResult: SandboxExecutionResult }> {
     const code = testCode || '';
     const executionResult = code
-      ? await SandboxedExecutionEngine.executeCode(code, 'nodejs', limits, claim)
-      : (await SandboxedExecutionEngine.verifyClaimDynamically(claim)).executionResult!;
+      ? await SandboxedExecutionEngine.executeCode(code, runtime, limits, claim)
+      : (await SandboxedExecutionEngine.verifyClaimDynamically(claim, runtime)).executionResult!;
 
     let updatedStatus = claim.status;
     let updatedConfidence = claim.confidence;

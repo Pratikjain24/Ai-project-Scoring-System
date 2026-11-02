@@ -19,6 +19,7 @@ liveJuryRouter.get('/observations', controller.getObservations);
 liveJuryRouter.get('/claims', controller.getClaims);
 liveJuryRouter.get('/demo', controller.getDemo);
 liveJuryRouter.post('/telemetry', controller.ingestTelemetry);
+liveJuryRouter.get('/telemetry/recent', controller.getRecentTelemetry);
 
 // Judge interactions
 liveJuryRouter.get('/questions', controller.getQuestions);

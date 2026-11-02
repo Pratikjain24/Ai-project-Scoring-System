@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: projectxray-api
+  namespace: projectxray-system
+  labels:
+    app.kubernetes.io/name: projectxray-api
+    app.kubernetes.io/component: api-gateway
+    app.kubernetes.io/part-of: projectxray-ai
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: projectxray-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: projectxray-api
+        app.kubernetes.io/component: api-gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "3001"
+    spec:
+      containers:
+        - name: api-gateway
+          image: projectxray-ai:latest
+          command: ["node", "dist/backend/src/server.js"]
+          env:
+            - name: APP_ROLE
+              value: "api"
+          envFrom:
+            - configMapRef:
+                name: projectxray-config
+            - secretRef:
+                name: projectxray-secrets
+          ports:
+            - name: http
+              containerPort: 3001
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3001
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3001
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+

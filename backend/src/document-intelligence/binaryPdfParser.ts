@@ -3,6 +3,7 @@ import zlib from 'zlib';
 import type { DocumentPage, DocumentTable, DocumentImage } from '../models/document';
 import type { ParsedDocumentUnit } from './documentParser';
 import { OcrService } from './ocrService';
+import { PagedPdfStreamer, type PagedStreamOptions } from './pagedPdfStreamer';
 
 export class BinaryPdfParser {
   /**
@@ -372,40 +373,56 @@ export class BinaryPdfParser {
 
       if (imageObjects.length > 0) {
         hasOcrApplied = true;
-        for (let i = 0; i < imageObjects.length; i++) {
-          const imgObj = imageObjects[i];
-          const pageNumber = i + 1;
-          const pageId = `pg_${documentId}_${pageNumber}`;
-          const decompressed = this.extractRawOrDecompressedImage(imgObj.stream, imgObj.header);
-          const ocrRes = await OcrService.recognizeImageBuffer(decompressed, 'image/jpeg', { documentId });
+        const batchSize = 2;
+        for (let batchStart = 0; batchStart < imageObjects.length; batchStart += batchSize) {
+          const batchEnd = Math.min(imageObjects.length, batchStart + batchSize);
+          const currentBatch = imageObjects.slice(batchStart, batchEnd);
 
-          const text = ocrRes.text.trim() || `[Scanned Page ${pageNumber}]`;
-          const lines = text.split('\n').filter((l) => l.trim());
-          const title = lines.length > 0 ? (lines[0].length > 70 ? lines[0].substring(0, 67) + '...' : lines[0]) : `Scanned Page ${pageNumber}`;
+          // Cooperative yield to keep Node.js event loop responsive for HTTP traffic
+          await new Promise((resolve) => setImmediate(resolve));
 
-          tables.push(...ocrRes.tables);
-          images.push({
-            id: `img_${documentId}_p${pageNumber}`,
-            documentId,
-            pageId,
-            pageNumber,
-            type: 'ARCHITECTURE_DIAGRAM',
-            caption: `Scanned visual artifact on Page ${pageNumber} (${ocrRes.engine})`,
-            identificationState: 'DETECTED',
-            confidence: ocrRes.confidence,
-            createdAt: new Date().toISOString(),
+          const batchPromises = currentBatch.map(async (imgObj, idx) => {
+            const pageNumber = batchStart + idx + 1;
+            const pageId = `pg_${documentId}_${pageNumber}`;
+            const decompressed = this.extractRawOrDecompressedImage(imgObj.stream, imgObj.header);
+            const ocrRes = await OcrService.recognizeImageBuffer(decompressed, 'image/jpeg', { documentId });
+
+            const text = ocrRes.text.trim() || `[Scanned Page ${pageNumber}]`;
+            const lines = text.split('\n').filter((l) => l.trim());
+            const title = lines.length > 0 ? (lines[0].length > 70 ? lines[0].substring(0, 67) + '...' : lines[0]) : `Scanned Page ${pageNumber}`;
+
+            const pageImage: DocumentImage = {
+              id: `img_${documentId}_p${pageNumber}`,
+              documentId,
+              pageId,
+              pageNumber,
+              type: 'ARCHITECTURE_DIAGRAM',
+              caption: `Scanned visual artifact on Page ${pageNumber} (${ocrRes.engine})`,
+              identificationState: 'DETECTED',
+              confidence: ocrRes.confidence,
+              createdAt: new Date().toISOString(),
+            };
+
+            const pageRecord: DocumentPage = {
+              id: pageId,
+              documentId,
+              pageNumber,
+              title,
+              text,
+              detectedTopics: this.deriveTopics(title, text),
+              confidence: ocrRes.confidence,
+              createdAt: new Date().toISOString(),
+            };
+
+            return { pageRecord, tables: ocrRes.tables, image: pageImage };
           });
 
-          pages.push({
-            id: pageId,
-            documentId,
-            pageNumber,
-            title,
-            text,
-            detectedTopics: this.deriveTopics(title, text),
-            confidence: ocrRes.confidence,
-            createdAt: new Date().toISOString(),
-          });
+          const batchResults = await Promise.all(batchPromises);
+          for (const res of batchResults) {
+            pages.push(res.pageRecord);
+            tables.push(...res.tables);
+            images.push(res.image);
+          }
         }
       } else {
         return this.parsePdf(buffer, documentId);
@@ -425,6 +442,18 @@ export class BinaryPdfParser {
         ocrApplied: hasOcrApplied,
       },
     };
+  }
+
+  /**
+   * Paged disk streaming parser for large multi-page or scanned PDFs (80+ pages).
+   * Spools pages to temporary disk storage and throttles OCR processing to max 2 parallel worker threads with memory guards.
+   */
+  static async parsePdfStreamed(
+    bufferOrPath: Buffer | string,
+    documentId: string,
+    options?: PagedStreamOptions
+  ): Promise<ParsedDocumentUnit> {
+    return PagedPdfStreamer.streamPdfPages(bufferOrPath, documentId, options);
   }
 
   /**

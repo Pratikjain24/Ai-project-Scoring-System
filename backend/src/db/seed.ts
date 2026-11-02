@@ -26,6 +26,14 @@ export async function seedDatabase(): Promise<void> {
   const database = getDb();
   // Clear existing tables for clean deterministic seed
   database.exec(`
+    DELETE FROM live_judge_notes;
+    DELETE FROM live_judge_questions;
+    DELETE FROM live_demo_events;
+    DELETE FROM live_claim_occurrences;
+    DELETE FROM live_transcript_segments;
+    DELETE FROM live_observations;
+    DELETE FROM live_events;
+    DELETE FROM live_jury_sessions;
     DELETE FROM jury_question_interactions;
     DELETE FROM score_history;
     DELETE FROM jury_notes;

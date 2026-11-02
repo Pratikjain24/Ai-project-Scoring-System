@@ -188,6 +188,8 @@ export const LiveCameraRoom: React.FC<LiveCameraRoomProps> = ({
 
     const tracker = new PresenterVisionTracker({
       targetFps: 30,
+      maxPresenters: 5,
+      enableMultiPresenter: true,
       onMetricsUpdate: (metrics) => {
         setPresenterMetrics(metrics);
         const ctx = canvas.getContext('2d');
@@ -247,12 +249,9 @@ export const LiveCameraRoom: React.FC<LiveCameraRoomProps> = ({
     } else if (activeMediaSource === 'SCREEN' && video && !isVideoOff) {
       tracker.startScreenShare(video).then(success => setUsingRealCamera(success));
     } else if (activeMediaSource === 'TEST_BENCH') {
-      // Start simulated presenter feed — no real camera needed
-      // The tracker's processFrame() will use generateSimulatedPresenterFrame() 
-      // when no live video is available
-      tracker.startWebcam(document.createElement('video')).then(() => {
-        setUsingRealCamera(false);
-      });
+      // Start simulated presenter feed directly — no real camera requested
+      tracker.startSimulation();
+      queueMicrotask(() => setUsingRealCamera(false));
     } else {
       tracker.stop();
       queueMicrotask(() => setUsingRealCamera(false));

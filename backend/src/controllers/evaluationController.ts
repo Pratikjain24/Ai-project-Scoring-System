@@ -123,10 +123,18 @@ export class EvaluationController {
 
     pipelineStreamEmitter.on('progress', listener);
 
-    // Keep-alive heartbeat every 15s to keep SSE connection alive across proxies
+    // Keep-alive heartbeat every 10s with active data payload so client onmessage monitors liveness
     const heartbeat = setInterval(() => {
-      res.write(': keep-alive\n\n');
-    }, 15000);
+      try {
+        res.write(`: keep-alive\n\ndata: ${JSON.stringify({
+          type: 'HEARTBEAT',
+          evaluationId,
+          timestamp: new Date().toISOString()
+        })}\n\n`);
+      } catch {
+        clearInterval(heartbeat);
+      }
+    }, 10000);
 
     req.on('close', () => {
       clearInterval(heartbeat);

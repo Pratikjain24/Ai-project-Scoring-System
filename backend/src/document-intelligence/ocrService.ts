@@ -245,10 +245,76 @@ export class OcrService {
     };
   }
 
-  // Bounded Concurrency Semaphore for Tesseract Workers (Max 2 Concurrent Workers)
+  // Bounded Concurrency Semaphore for OCR Workers (Strict Maximum 2 Concurrent Workers)
   private static activeWorkersCount = 0;
-  private static readonly MAX_CONCURRENT_WORKERS = 2;
+  public static readonly MAX_CONCURRENT_WORKERS = 2;
   private static workerWaitQueue: Array<() => void> = [];
+
+  // Memory Guard Thresholds (Prevents >400MB RAM saturation and event loop freeze)
+  public static readonly MEMORY_WARNING_THRESHOLD_MB = 300;
+  public static readonly MEMORY_CIRCUIT_BREAKER_MB = 350;
+
+  /**
+   * Proactively evaluates current Node.js heap memory pressure
+   * and recommends the optimal OCR execution engine.
+   */
+  public static checkMemoryPressure(): {
+    heapUsedMb: number;
+    status: 'NORMAL' | 'ELEVATED' | 'CRITICAL';
+    recommendedEngine: OcrEngineType;
+  } {
+    const mem = process.memoryUsage();
+    const heapUsedMb = Math.round(mem.heapUsed / 1024 / 1024);
+
+    if (heapUsedMb >= this.MEMORY_CIRCUIT_BREAKER_MB) {
+      return {
+        heapUsedMb,
+        status: 'CRITICAL',
+        recommendedEngine: 'FAST_RASTER_OCR',
+      };
+    } else if (heapUsedMb >= this.MEMORY_WARNING_THRESHOLD_MB) {
+      return {
+        heapUsedMb,
+        status: 'ELEVATED',
+        recommendedEngine: 'FAST_RASTER_OCR',
+      };
+    }
+
+    return {
+      heapUsedMb,
+      status: 'NORMAL',
+      recommendedEngine: 'TESSERACT_OCR',
+    };
+  }
+
+  /**
+   * Returns current active OCR worker count (strictly <= 2)
+   */
+  public static getActiveWorkersCount(): number {
+    return this.activeWorkersCount;
+  }
+
+  /**
+   * Returns maximum permitted concurrent OCR worker count
+   */
+  public static getMaxConcurrentWorkers(): number {
+    return this.MAX_CONCURRENT_WORKERS;
+  }
+
+  /**
+   * Returns number of queued OCR tasks waiting for a worker slot
+   */
+  public static getWaitingQueueLength(): number {
+    return this.workerWaitQueue.length;
+  }
+
+  /**
+   * Resets worker pool state (useful for test isolation)
+   */
+  public static resetWorkerPool(): void {
+    this.activeWorkersCount = 0;
+    this.workerWaitQueue = [];
+  }
 
   private static async acquireWorkerSlot(): Promise<void> {
     if (this.activeWorkersCount < this.MAX_CONCURRENT_WORKERS) {
@@ -282,10 +348,9 @@ export class OcrService {
     const startTime = Date.now();
 
     // Check heap memory headroom before launching heavy WASM instance
-    const mem = process.memoryUsage();
-    const heapUsedMb = Math.round(mem.heapUsed / 1024 / 1024);
-    if (heapUsedMb > 450) {
-      ocrLogger.warn(`Heap pressure high (${heapUsedMb}MB), switching to FastRaster OCR engine to prevent event loop starvation`);
+    const memPressure = this.checkMemoryPressure();
+    if (memPressure.status === 'CRITICAL' || memPressure.status === 'ELEVATED') {
+      ocrLogger.warn(`Heap pressure elevated (${memPressure.heapUsedMb}MB >= ${this.MEMORY_WARNING_THRESHOLD_MB}MB), switching to FastRaster OCR engine to prevent event loop starvation`);
       return this.recognizeWithFastRaster(buffer, 'image/png', options);
     }
 

@@ -20,6 +20,12 @@ import type {
   LivePresenterTrackingMetrics
 } from '../models/liveJury';
 import { createModuleLogger } from '../utils/logger';
+import {
+  TelemetryRingBuffer,
+  summarizePresenterMetrics,
+  type RingBufferStats,
+  type PresenterTelemetrySummary
+} from './telemetryRingBuffer';
 
 const liveLogger = createModuleLogger('LiveJuryEngine');
 
@@ -29,6 +35,11 @@ export class LiveJuryEngine {
   private static instance: LiveJuryEngine;
   private repository: LiveJuryRepository;
   private listeners: Map<string, Set<LiveEventListener>> = new Map();
+
+  // Bounded sliding-window ring buffer (max 100 entries per session) with FIFO eviction
+  // Mitigates Bug #5: In-memory visual telemetry unbounded accumulation
+  public static readonly MAX_TELEMETRY_BUFFER_SIZE = 100;
+  private telemetryRingBuffers: Map<string, TelemetryRingBuffer<LivePresenterTrackingMetrics>> = new Map();
   private latestVisualTelemetry: Map<string, { metrics: LivePresenterTrackingMetrics; count: number }> = new Map();
 
   constructor(repository?: LiveJuryRepository) {
@@ -566,11 +577,21 @@ export class LiveJuryEngine {
     });
     this.emitEvent(primaryEvent);
 
-    // 5. Store latest visual telemetry
-    const current = this.latestVisualTelemetry.get(sessionId) || { metrics: telemetry, count: 0 };
+    // 5. Ingest into bounded sliding window ring buffer with FIFO eviction (Max 100 entries per session)
+    let ringBuffer = this.telemetryRingBuffers.get(sessionId);
+    if (!ringBuffer) {
+      ringBuffer = new TelemetryRingBuffer<LivePresenterTrackingMetrics>({
+        maxSize: LiveJuryEngine.MAX_TELEMETRY_BUFFER_SIZE
+      });
+      this.telemetryRingBuffers.set(sessionId, ringBuffer);
+    }
+
+    ringBuffer.push(telemetry, timestampMs);
+
+    // Keep backwards-compatible latest pointer synchronized with total count
     this.latestVisualTelemetry.set(sessionId, {
       metrics: telemetry,
-      count: current.count + 1
+      count: ringBuffer.totalPushed
     });
 
     const snapshot = this.getScoreSnapshot(sessionId);
@@ -578,19 +599,23 @@ export class LiveJuryEngine {
   }
 
   /**
-   * Get Live Indicators & Score Snapshot (incorporating visual presenter metrics)
+   * Get Live Indicators & Score Snapshot (incorporating sliding window visual presenter metrics)
    */
   getScoreSnapshot(sessionId: string): LiveScoreSnapshot {
     const baseSnapshot = this.repository.getScoreSnapshot(sessionId);
-    const stored = this.latestVisualTelemetry.get(sessionId);
+    const ringBuffer = this.telemetryRingBuffers.get(sessionId);
+    const stored = ringBuffer?.getLatest() || this.latestVisualTelemetry.get(sessionId)?.metrics;
 
     if (stored) {
-      baseSnapshot.visualMetrics = stored.metrics;
-      baseSnapshot.visualTelemetryCount = stored.count;
+      baseSnapshot.visualMetrics = stored;
+      baseSnapshot.visualTelemetryCount = ringBuffer ? ringBuffer.totalPushed : (this.latestVisualTelemetry.get(sessionId)?.count || 0);
 
-      // Calibrate presentation coverage with eye contact & posture quality
-      const eyeContactFactor = stored.metrics.eyeContactScore / 100;
-      const postureFactor = stored.metrics.postureStability / 100;
+      // Calibrate presentation coverage using sliding window averages (resilient to momentary frame blips)
+      const rollingEyeContact = ringBuffer ? ringBuffer.getAverage(m => m.eyeContactScore) : stored.eyeContactScore;
+      const rollingPosture = ringBuffer ? ringBuffer.getAverage(m => m.postureStability) : stored.postureStability;
+
+      const eyeContactFactor = rollingEyeContact / 100;
+      const postureFactor = rollingPosture / 100;
       const visualQualityMultiplier = (eyeContactFactor * 0.6) + (postureFactor * 0.4);
 
       // Weighted adjustment to presentation coverage (up to +/- 8%)
@@ -602,7 +627,74 @@ export class LiveJuryEngine {
   }
 
   getLatestVisualTelemetry(sessionId: string): { metrics: LivePresenterTrackingMetrics; count: number } | undefined {
+    const ringBuffer = this.telemetryRingBuffers.get(sessionId);
+    if (ringBuffer && ringBuffer.size > 0) {
+      return {
+        metrics: ringBuffer.getLatest()!,
+        count: ringBuffer.totalPushed
+      };
+    }
     return this.latestVisualTelemetry.get(sessionId);
+  }
+
+  /**
+   * Retrieves the in-memory fixed-size sliding window ring buffer for an active session.
+   */
+  getTelemetryRingBuffer(sessionId: string): TelemetryRingBuffer<LivePresenterTrackingMetrics> | undefined {
+    return this.telemetryRingBuffers.get(sessionId);
+  }
+
+  /**
+   * Retrieves recent telemetry frames in chronological order (up to limit, max 100).
+   */
+  getRecentVisualTelemetry(sessionId: string, limit?: number): LivePresenterTrackingMetrics[] {
+    const buffer = this.telemetryRingBuffers.get(sessionId);
+    return buffer ? buffer.getRecent(limit) : [];
+  }
+
+  /**
+   * Returns diagnostics and capacity metrics for a session's telemetry buffer.
+   */
+  getTelemetryBufferStats(sessionId: string): RingBufferStats | undefined {
+    return this.telemetryRingBuffers.get(sessionId)?.getStats();
+  }
+
+  /**
+   * Computes rich statistical roll-up summary over the sliding window.
+   */
+  getPresenterTelemetrySummary(sessionId: string): PresenterTelemetrySummary | undefined {
+    const buffer = this.telemetryRingBuffers.get(sessionId);
+    return buffer ? summarizePresenterMetrics(buffer) : undefined;
+  }
+
+  /**
+   * Prunes and frees in-memory telemetry buffer for a completed or inactive session.
+   */
+  clearSessionTelemetry(sessionId: string): boolean {
+    const existed = this.telemetryRingBuffers.delete(sessionId);
+    this.latestVisualTelemetry.delete(sessionId);
+    if (existed) {
+      liveLogger.info('Pruned in-memory telemetry ring buffer for session', { sessionId });
+    }
+    return existed;
+  }
+
+  /**
+   * Returns the total number of sessions currently maintaining an in-memory telemetry buffer.
+   */
+  getActiveTelemetrySessionCount(): number {
+    return this.telemetryRingBuffers.size;
+  }
+
+  /**
+   * Returns total number of buffered telemetry frames across all active sessions.
+   */
+  getTotalBufferedFrames(): number {
+    let total = 0;
+    for (const buffer of this.telemetryRingBuffers.values()) {
+      total += buffer.size;
+    }
+    return total;
   }
 
   /**
@@ -646,6 +738,9 @@ export class LiveJuryEngine {
       reportId: report.id,
       finalizedAt: new Date().toISOString()
     };
+
+    // Prune in-memory sliding window ring buffer upon finalization to eliminate memory leak
+    this.clearSessionTelemetry(sessionId);
 
     return result;
   }

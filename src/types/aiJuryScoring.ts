@@ -322,6 +322,82 @@ export interface JurorDeliberation {
   stance: 'Unanimous Endorsement' | 'Endorse with Stipulations' | 'Conditional Approval' | 'Revision Required';
   keyQuote: string;
   coreCritique: string;
+  llmArchitecture?: string;
+  modelId?: string;
+  providerName?: string;
+  specializedDomain?: string;
+}
+
+export interface JurorTurnPosition {
+  jurorId: string;
+  jurorName: string;
+  score: number;
+  verdict: string;
+  confidence: number;
+  thesis: string;
+  keyStrengths: string[];
+  keyReservations: string[];
+  evidenceCitations: string[];
+  llmArchitecture?: string;
+  modelId?: string;
+  providerName?: string;
+  specializedDomain?: string;
+}
+
+export interface InterJurorCritique {
+  challengerId: string;
+  challengerName: string;
+  challengerModel?: string;
+  targetJurorId: string;
+  targetJurorName: string;
+  targetModel?: string;
+  critiqueDimension: string;
+  argument: string;
+  counterEvidence: string;
+  suggestedScoreDelta: number;
+  targetResponse?: string;
+  concededDelta?: number;
+}
+
+export interface DebateRound {
+  roundNumber: number;
+  phaseName: string;
+  timestamp: string;
+  meanScore: number;
+  scoreStdDev: number;
+  positions: JurorTurnPosition[];
+  critiques?: InterJurorCritique[];
+  roundSynthesis: string;
+}
+
+export interface DissentingOpinion {
+  jurorId: string;
+  jurorName: string;
+  finalScore: number;
+  consensusVariance: number;
+  dissentRationale: string;
+  dissentSeverity: string;
+  llmArchitecture?: string;
+  modelId?: string;
+  specializedDomain?: string;
+}
+
+export interface JuryDebateData {
+  id: string;
+  evaluationId: string;
+  projectName: string;
+  totalRounds: number;
+  rounds: DebateRound[];
+  initialMeanScore: number;
+  finalConsensusScore: number;
+  consensusScore: number;
+  ratifiedVerdict: string;
+  initialStdDev: number;
+  finalStdDev: number;
+  convergenceAchieved: boolean;
+  dissentingOpinions: DissentingOpinion[];
+  transcript: string;
+  ratifiedAt: string;
 }
 
 export interface WeightPreset {

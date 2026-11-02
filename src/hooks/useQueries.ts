@@ -10,6 +10,7 @@ export const queryKeys = {
   evaluations: ['evaluations'] as const,
   evaluation: (id?: string) => ['evaluations', id] as const,
   evaluationStatus: (id?: string) => ['evaluations', id, 'status'] as const,
+  orchestratorStatus: (id?: string) => ['evaluations', id, 'orchestrator-status'] as const,
   masterScore: (id?: string) => ['evaluations', id, 'master-score'] as const,
   projectDNA: (id?: string) => ['evaluations', id, 'project-dna'] as const,
   technicalAudit: (id?: string) => ['evaluations', id, 'technical'] as const,
@@ -71,6 +72,21 @@ export function useEvaluationStatusQuery(evaluationId?: string, options?: { enab
     queryFn: () => {
       if (!evaluationId) throw new ApiError('Evaluation ID is required', 'INVALID_ARGUMENT');
       return api.getEvaluationStatus(evaluationId);
+    },
+    enabled: Boolean(evaluationId) && (options?.enabled ?? true),
+    refetchInterval: options?.refetchInterval ?? false,
+  });
+}
+
+export function useOrchestratorStatusQuery(
+  evaluationId?: string, 
+  options?: { enabled?: boolean; refetchInterval?: number | false | ((query: any) => number | false) }
+) {
+  return useQuery({
+    queryKey: queryKeys.orchestratorStatus(evaluationId),
+    queryFn: () => {
+      if (!evaluationId) throw new ApiError('Evaluation ID is required', 'INVALID_ARGUMENT');
+      return api.getOrchestratorStatus(evaluationId);
     },
     enabled: Boolean(evaluationId) && (options?.enabled ?? true),
     refetchInterval: options?.refetchInterval ?? false,

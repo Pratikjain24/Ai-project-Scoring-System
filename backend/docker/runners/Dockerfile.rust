@@ -1,0 +1,33 @@
+# ==============================================================================
+# PROJECTX-RAY AI — MULTI-LANGUAGE SANDBOX RUNNER: RUST 1.75
+# Image Tag: runner-rust:1.75
+# Security: Non-root user (10001), isolated compiler output, no network
+# Enforced Limits: --memory 256m, --cpus 1.0, --network none, --read-only
+# ==============================================================================
+
+FROM rust:1.75-alpine
+
+LABEL org.opencontainers.image.title="ProjectX-Ray AI Rust 1.75 Sandbox Runner" \
+      org.opencontainers.image.description="Hardened, isolated sandbox container for Rust capstone code benchmarking" \
+      org.opencontainers.image.version="1.75" \
+      org.projectxray.runner="runner-rust:1.75"
+
+# Install musl development libraries for static binary compilation
+RUN apk add --no-cache musl-dev gcc
+
+# Create unprivileged sandbox user
+RUN addgroup -g 10001 -S sandboxgroup && \
+    adduser -u 10001 -S sandboxuser -G sandboxgroup -h /home/sandboxuser
+
+WORKDIR /workspace
+RUN chown -R sandboxuser:sandboxgroup /workspace
+
+ENV HOME=/home/sandboxuser \
+    RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo
+
+USER sandboxuser
+
+ENTRYPOINT ["sh", "-c"]
+CMD ["rustc /workspace/main.rs -o /tmp/runner && /tmp/runner"]
+

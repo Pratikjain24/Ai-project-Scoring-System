@@ -84,6 +84,17 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+// Prometheus Metrics Scraper Endpoint (Cluster / External monitoring scraper)
+app.get('/metrics', async (_req, res) => {
+  try {
+    const metricsText = await pipelineQueue.getPrometheusMetrics();
+    res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+    res.status(200).send(metricsText);
+  } catch (err: any) {
+    res.status(500).send(`# Error collecting Prometheus metrics: ${err?.message || 'unknown error'}\n`);
+  }
+});
+
 import { singleClaimRouter } from './routes/claimVerificationRoutes';
 import { rubricRouter } from './routes/juryRoutes';
 import { shareRouter } from './routes/reportRoutes';
@@ -137,8 +148,8 @@ import { pipelineQueue } from './pipeline/pipelineQueue';
 // Start server when executed directly
 const isTestMode = process.env.NODE_ENV === 'test' || process.argv.some(arg => arg.includes('--test') || arg.includes('.test.ts'));
 if (!isTestMode) {
-  // Initialize persistent queue (BullMQ + SQLite fallback) and auto-resume interrupted jobs
-  pipelineQueue.init().catch((qErr) => {
+  // Initialize persistent queue (BullMQ + SQLite fallback) respecting decoupled APP_ROLE
+  pipelineQueue.init({ role: ENV.APP_ROLE }).catch((qErr) => {
     logger.error('Pipeline queue initialization error', { module: 'Server', error: qErr });
   });
 

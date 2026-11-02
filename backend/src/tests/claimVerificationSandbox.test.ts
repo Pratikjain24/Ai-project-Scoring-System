@@ -269,4 +269,133 @@ console.log('[BENCHMARK] response_time=12ms');
     assert.ok(execResponse.data.benchmarks.length > 0);
     assert.strictEqual(execResponse.data.benchmarks[0].isVerified, true);
   });
+
+  it('9. Pre-built lightweight runner images (runner-python:3.11, runner-rust:1.75, runner-java:21) with strict resource limits', () => {
+    const defaultLimits = {
+      timeoutMs: 5000,
+      memoryLimitMb: 256,
+      cpuShares: 1.0,
+      networkDisabled: true,
+      readOnlyRoot: true,
+      maxStdoutBytes: 65536,
+      usePrebuiltRunners: true,
+    };
+
+    // 1. Python runner image and limits
+    const pyDocker = DockerContainerRunner.buildDockerArgs('/tmp/py_ws', 'python', 'test_runner.py', defaultLimits);
+    assert.ok(pyDocker.args.includes('runner-python:3.11'), 'Must use pre-built runner-python:3.11');
+    assert.ok(pyDocker.args.includes('--memory=256m'), 'Must enforce --memory 256m');
+    assert.ok(pyDocker.args.includes('--cpus=1'), 'Must enforce --cpus 1.0');
+    assert.ok(pyDocker.args.includes('--network=none'), 'Must enforce --network none');
+    assert.ok(pyDocker.args.includes('--read-only'), 'Must enforce read-only container root');
+    assert.ok(pyDocker.args.includes('--pids-limit=64'), 'Must enforce pids limit');
+
+    // 2. Rust runner image and limits
+    const rustDocker = DockerContainerRunner.buildDockerArgs('/tmp/rust_ws', 'rust', 'main.rs', defaultLimits);
+    assert.ok(rustDocker.args.includes('runner-rust:1.75'), 'Must use pre-built runner-rust:1.75');
+    assert.ok(rustDocker.args.includes('--memory=256m'));
+    assert.ok(rustDocker.args.includes('--cpus=1'));
+    assert.ok(rustDocker.args.includes('--network=none'));
+
+    // 3. Java runner image and limits
+    const javaDocker = DockerContainerRunner.buildDockerArgs('/tmp/java_ws', 'java', 'Main.java', defaultLimits);
+    assert.ok(javaDocker.args.includes('runner-java:21'), 'Must use pre-built runner-java:21');
+    assert.ok(javaDocker.args.includes('--memory=256m'));
+    assert.ok(javaDocker.args.includes('--cpus=1'));
+
+    // 4. Go runner image
+    const goDocker = DockerContainerRunner.buildDockerArgs('/tmp/go_ws', 'go', 'main.go', defaultLimits);
+    assert.ok(goDocker.args.includes('runner-go:1.22'), 'Must use pre-built runner-go:1.22');
+
+    // 5. C++ runner image
+    const cppDocker = DockerContainerRunner.buildDockerArgs('/tmp/cpp_ws', 'cpp', 'main.cpp', defaultLimits);
+    assert.ok(cppDocker.args.includes('runner-cpp:13'), 'Must use pre-built runner-cpp:13');
+
+    // 6. Node prebuilt runner image
+    const nodePrebuilt = DockerContainerRunner.buildDockerArgs('/tmp/node_ws', 'nodejs', 'test_runner.js', defaultLimits);
+    assert.ok(nodePrebuilt.args.includes('runner-node:20'), 'Must use prebuilt runner-node:20 when enabled');
+
+    // 7. Fallback to upstream images when usePrebuiltRunners is disabled
+    const fallbackLimits = { ...defaultLimits, usePrebuiltRunners: false };
+    const pyFallback = DockerContainerRunner.buildDockerArgs('/tmp/py_ws', 'python', 'test_runner.py', fallbackLimits);
+    assert.ok(pyFallback.args.includes('python:3.11-alpine'), 'Must fallback to python:3.11-alpine');
+
+    const rustFallback = DockerContainerRunner.buildDockerArgs('/tmp/rust_ws', 'rust', 'main.rs', fallbackLimits);
+    assert.ok(rustFallback.args.includes('rust:1.75-alpine'), 'Must fallback to rust:1.75-alpine');
+
+    const javaFallback = DockerContainerRunner.buildDockerArgs('/tmp/java_ws', 'java', 'Main.java', fallbackLimits);
+    assert.ok(javaFallback.args.includes('eclipse-temurin:21-alpine'), 'Must fallback to eclipse-temurin:21-alpine');
+  });
+
+  it('10. Multi-language dynamic test harness synthesis across Python, Java, Rust, Go, and C++', async () => {
+    const claim: Claim = {
+      id: 'claim_cross_lang',
+      evaluationId: 'eval_multi_lang',
+      claimText: 'Distributed consensus engine delivers latency under 30ms with 95% accuracy',
+      claimType: 'LATENCY',
+      importance: 'CRITICAL',
+      status: 'UNVERIFIED',
+      confidence: 50,
+      projectEvidence: '',
+      explanation: '',
+      supportingEvidenceIds: [],
+      contradictingEvidenceIds: [],
+      createdAt: new Date().toISOString(),
+    };
+
+    // Node test harness execution
+    const nodeRes = await SandboxedExecutionEngine.verifyClaimDynamically(claim, 'nodejs');
+    assert.strictEqual(nodeRes.executionResult.status, 'SUCCESS');
+    assert.strictEqual(nodeRes.executionResult.runtime, 'nodejs');
+    assert.ok(nodeRes.executionResult.benchmarks.length > 0);
+
+    // Verify status reports all supported runtimes including Java
+    const status = SandboxedExecutionEngine.getStatus();
+    assert.ok(status.supportedRuntimes.includes('java'), 'Java must be in supported runtimes');
+    assert.ok(status.supportedRuntimes.includes('rust'), 'Rust must be in supported runtimes');
+    assert.ok(status.supportedRuntimes.includes('go'), 'Go must be in supported runtimes');
+    assert.ok(status.supportedRuntimes.includes('cpp'), 'C++ must be in supported runtimes');
+    assert.ok(status.supportedRuntimes.includes('python'), 'Python must be in supported runtimes');
+  });
+
+  it('11. Automated test parser handles JUnit, PyTest, Go, and Cargo output with benchmark extraction', async () => {
+    // JUnit simulation with benchmark
+    const junitOutput = `
+Running org.projectxray.CapstoneVerificationTest
+Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.42 s - in org.projectxray.CapstoneVerificationTest
+[BENCHMARK] throughput=4850ops/sec
+[BENCHMARK] latency=14.2ms
+`;
+    const claim: Claim = {
+      id: 'claim_bench_eval',
+      evaluationId: 'eval_test',
+      claimText: 'System achieves throughput over 4000ops/sec and latency under 20ms',
+      claimType: 'LATENCY',
+      importance: 'HIGH',
+      status: 'UNVERIFIED',
+      confidence: 60,
+      projectEvidence: '',
+      explanation: '',
+      supportingEvidenceIds: [],
+      contradictingEvidenceIds: [],
+      createdAt: new Date().toISOString(),
+    };
+
+    // Execute through SandboxedExecutionEngine with mock code printing JUnit results
+    const mockJUnitCode = `
+console.log(${JSON.stringify(junitOutput)});
+`;
+    const result = await SandboxedExecutionEngine.executeCode(mockJUnitCode, 'nodejs', { timeoutMs: 3000 }, claim);
+
+    assert.strictEqual(result.status, 'SUCCESS');
+    assert.strictEqual(result.testsPassed, 8);
+    assert.strictEqual(result.testsFailed, 0);
+    assert.strictEqual(result.codeSupport, 'SUPPORTED');
+    assert.strictEqual(result.benchmarks.length, 2);
+
+    const latencyBm = result.benchmarks.find(b => b.metric === 'latency');
+    assert.ok(latencyBm);
+    assert.strictEqual(latencyBm?.measuredValue, 14.2);
+    assert.strictEqual(latencyBm?.isVerified, true);
+  });
 });

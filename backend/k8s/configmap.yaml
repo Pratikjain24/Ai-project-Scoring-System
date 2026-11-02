@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: projectxray-config
+  namespace: projectxray-system
+  labels:
+    app.kubernetes.io/name: projectxray
+    app.kubernetes.io/part-of: projectxray-ai
+data:
+  NODE_ENV: "production"
+  PORT: "3001"
+  WORKER_PORT: "3002"
+  QUEUE_NAME: "evaluation-pipeline-queue"
+  PIPELINE_CONCURRENCY: "2"
+  LOG_LEVEL: "info"
+  MOCK_AI: "true"
+  REDIS_HOST: "redis-service.projectxray-system.svc.cluster.local"
+  REDIS_PORT: "6379"
+  DATABASE_DIALECT: "postgres"
+  PG_HOST: "postgres-service.projectxray-system.svc.cluster.local"
+  PG_PORT: "5432"
+  PG_DATABASE: "projectxray"
+  PG_USER: "postgres"
+  PG_MAX_POOL: "25"
+  STORAGE_DRIVER: "s3"
+  STORAGE_S3_REGION: "us-east-1"
+  STORAGE_S3_BUCKET: "projectxray-evidence-vault"
+  CORS_ORIGIN: "https://jury.institution.edu"
+

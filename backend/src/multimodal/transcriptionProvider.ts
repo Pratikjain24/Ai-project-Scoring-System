@@ -13,6 +13,7 @@ import { promisify } from 'node:util';
 import type { TranscriptSegment } from '../models/multimodal';
 import { ENV } from '../config/env';
 import { createModuleLogger } from '../utils/logger';
+import { SpeakerDiarizationEngine } from './speakerDiarizationEngine';
 
 const execFileAsync = promisify(execFile);
 const transcriptionLogger = createModuleLogger('TranscriptionProvider');
@@ -281,12 +282,10 @@ export class WhisperApiTranscriptionProvider implements SpeechTranscriptionProvi
   }
 
   private mapWhisperSegments(videoId: string, rawSegments: any[]): TranscriptSegment[] {
-    return rawSegments.map((s, idx) => {
+    const rawMapped: TranscriptSegment[] = rawSegments.map((s, idx) => {
       const avgLogprob = typeof s.avg_logprob === 'number' ? s.avg_logprob : -0.2;
       // Convert logprob to confidence [0.1, 1.0]
       const confidence = Math.max(0.1, Math.min(1.0, Math.round(Math.exp(avgLogprob) * 100) / 100));
-      // Alternate speaker tags every few sentences for multi-presenter demos
-      const speakerTag = idx % 5 >= 3 ? 'SPEAKER_2' : 'SPEAKER_1';
 
       return {
         id: `trans_whisper_${videoId}_${idx + 1}`,
@@ -295,10 +294,23 @@ export class WhisperApiTranscriptionProvider implements SpeechTranscriptionProvi
         endTime: Math.round((s.end || 0) * 10) / 10,
         text: (s.text || '').trim(),
         confidence,
-        speakerTag,
+        speakerTag: s.speaker || (idx % 5 >= 3 ? 'SPEAKER_02' : 'SPEAKER_01'),
         createdAt: new Date().toISOString(),
       };
     });
+
+    // Run multi-speaker diarization to cluster and ratify speaker attributions
+    const diarizationResult = SpeakerDiarizationEngine.diarize(rawMapped);
+    return diarizationResult.annotatedSegments.map((s) => ({
+      id: s.id,
+      videoId: s.videoId,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      text: s.text,
+      confidence: s.confidence,
+      speakerTag: s.speakerId,
+      createdAt: s.createdAt,
+    }));
   }
 }
 
