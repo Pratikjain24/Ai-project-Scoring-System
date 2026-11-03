@@ -30,6 +30,11 @@ export class EvaluationRepository {
       // Fallback: Check if the provided id is a project_id
       row = db.get<any>(`SELECT * FROM evaluations WHERE project_id = ? ORDER BY created_at DESC LIMIT 1`, id);
     }
+    if (!row && id.startsWith('eval_')) {
+      // Fallback: If id has synthetic eval_ prefix, strip it and check project_id
+      const stripped = id.slice(5);
+      row = db.get<any>(`SELECT * FROM evaluations WHERE project_id = ? ORDER BY created_at DESC LIMIT 1`, stripped);
+    }
     if (!row) return undefined;
 
     return {
@@ -82,6 +87,8 @@ export class EvaluationRepository {
   }
 
   static update(id: string, updates: Partial<Evaluation>): Evaluation | undefined {
+    const existing = this.findById(id);
+    const targetId = existing ? existing.id : id;
     const now = new Date().toISOString();
     db.run(
       `UPDATE evaluations SET
@@ -102,10 +109,10 @@ export class EvaluationRepository {
             : (updates.executiveSummary as any).coreSummary || JSON.stringify(updates.executiveSummary))
         : null,
       now,
-      id
+      targetId
     );
 
-    return this.findById(id);
+    return this.findById(targetId);
   }
 
   // --- Analysis Jobs ---
@@ -159,7 +166,9 @@ export class EvaluationRepository {
   }
 
   static getJobsByEvaluationId(evaluationId: string): AnalysisJob[] {
-    const rows = db.all<any>(`SELECT * FROM analysis_jobs WHERE evaluation_id = ? ORDER BY stage_index ASC`, evaluationId);
+    const existing = this.findById(evaluationId);
+    const targetId = existing ? existing.id : evaluationId;
+    const rows = db.all<any>(`SELECT * FROM analysis_jobs WHERE evaluation_id = ? ORDER BY stage_index ASC`, targetId);
     return rows.map(r => ({
       id: r.id,
       evaluationId: r.evaluation_id,

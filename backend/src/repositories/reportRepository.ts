@@ -1,4 +1,5 @@
 import { db } from '../db/database';
+import { EvaluationRepository } from './evaluationRepository';
 import type { 
   EvaluationReport, 
   ReportShare, 
@@ -10,9 +11,20 @@ import type {
 
 export class ReportRepository {
   /**
+   * Helper to resolve canonical evaluation ID whether given an ID, slug, or eval_slug.
+   */
+  public static resolveCanonicalEvalId(evaluationId: string): string {
+    const evaluation = EvaluationRepository.findById(evaluationId);
+    return evaluation ? evaluation.id : evaluationId;
+  }
+
+  /**
    * Save or update an EvaluationReport.
    */
   static saveReport(report: EvaluationReport): void {
+    const canonicalId = this.resolveCanonicalEvalId(report.evaluationId);
+    report.evaluationId = canonicalId;
+
     // Ensure table exists
     db.run(`
       CREATE TABLE IF NOT EXISTS evaluation_reports (
@@ -73,10 +85,12 @@ export class ReportRepository {
    * Fetch report by evaluation ID and optional version.
    */
   static getReport(evaluationId: string, version?: number): EvaluationReport | undefined {
+    const canonicalId = this.resolveCanonicalEvalId(evaluationId);
+
     if (version !== undefined) {
       const verRow = db.get<any>(
         `SELECT report_json FROM report_versions WHERE evaluation_id = ? AND version = ?`,
-        evaluationId,
+        canonicalId,
         version
       );
       if (verRow) {
@@ -90,15 +104,31 @@ export class ReportRepository {
 
     const row = db.get<any>(
       `SELECT report_json FROM evaluation_reports WHERE evaluation_id = ?`,
-      evaluationId
+      canonicalId
     );
-    if (!row) return undefined;
-
-    try {
-      return JSON.parse(row.report_json);
-    } catch {
-      return undefined;
+    if (row) {
+      try {
+        return JSON.parse(row.report_json);
+      } catch {
+        // fallback
+      }
     }
+
+    // Fallback: If requested version not found or evaluation_reports has no row,
+    // fetch the latest version available in report_versions
+    const latestVer = db.get<any>(
+      `SELECT report_json FROM report_versions WHERE evaluation_id = ? ORDER BY version DESC LIMIT 1`,
+      canonicalId
+    );
+    if (latestVer) {
+      try {
+        return JSON.parse(latestVer.report_json);
+      } catch {
+        // fallback
+      }
+    }
+
+    return undefined;
   }
 
   /**
@@ -147,13 +177,14 @@ export class ReportRepository {
    * List all versions of a report.
    */
   static getReportVersions(evaluationId: string): ReportVersionMeta[] {
+    const canonicalId = this.resolveCanonicalEvalId(evaluationId);
     const rows = db.all<any>(
       `SELECT version, report_id, overall_score, verdict, confidence, coverage,
               status, changes_summary, new_evidence_count, changed_claims_count, generated_at
        FROM report_versions
        WHERE evaluation_id = ?
        ORDER BY version ASC`,
-      evaluationId
+      canonicalId
     );
 
     return rows.map(r => ({
@@ -221,6 +252,8 @@ export class ReportRepository {
    * Create a shareable link token.
    */
   static createShare(share: ReportShare): ReportShare {
+    const canonicalId = this.resolveCanonicalEvalId(share.evaluationId);
+    share.evaluationId = canonicalId;
     db.run(
       `INSERT OR REPLACE INTO report_shares (
         id, evaluation_id, report_id, token, permissions, expires_at, revoked_at, created_at
@@ -275,9 +308,10 @@ export class ReportRepository {
    * List all share links for an evaluation.
    */
   static getSharesForEvaluation(evaluationId: string): ReportShare[] {
+    const canonicalId = this.resolveCanonicalEvalId(evaluationId);
     const rows = db.all<any>(
       `SELECT * FROM report_shares WHERE evaluation_id = ? ORDER BY created_at DESC`,
-      evaluationId
+      canonicalId
     );
     return rows.map(r => ({
       id: r.id,
@@ -300,8 +334,9 @@ export class ReportRepository {
     type?: string,
     minConfidence?: number
   ): ReportEvidenceIndexItem[] {
+    const canonicalId = this.resolveCanonicalEvalId(evaluationId);
     let sql = `SELECT * FROM evidence WHERE evaluation_id = ?`;
-    const params: any[] = [evaluationId];
+    const params: any[] = [canonicalId];
 
     if (type && type !== 'ALL') {
       sql += ` AND type = ?`;
@@ -337,9 +372,10 @@ export class ReportRepository {
    */
   static getSourcesForReport(evaluationId: string): ReportSourceCitation[] {
     try {
+      const canonicalId = this.resolveCanonicalEvalId(evaluationId);
       const rows = db.all<any>(
         `SELECT * FROM research_sources WHERE evaluation_id = ? ORDER BY overall_rank ASC`,
-        evaluationId
+        canonicalId
       );
 
       return rows.map((r, idx) => {

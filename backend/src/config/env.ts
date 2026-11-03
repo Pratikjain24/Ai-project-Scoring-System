@@ -1,8 +1,14 @@
 import dotenv from 'dotenv';
 import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 // Load .env from root or backend directory
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, '../../');
 
 /**
  * Development-only fallback signing key.
@@ -15,10 +21,24 @@ const isTestEnv = process.env.NODE_ENV === 'test' || process.argv.some(a => a.in
 const nodeEnv = isTestEnv ? 'test' : (process.env.NODE_ENV || 'development');
 const jwtSecret = process.env.JWT_SECRET?.trim() || (nodeEnv === 'production' ? '' : DEV_FALLBACK_JWT_SECRET);
 
+const configuredDbPath = isTestEnv
+  ? (process.env.TEST_DATABASE_PATH || path.resolve(projectRoot, 'projectxray_test.db'))
+  : process.env.DATABASE_PATH;
+
+const resolvedDbPath = configuredDbPath
+  ? (path.isAbsolute(configuredDbPath)
+      ? configuredDbPath
+      : (fs.existsSync(path.resolve(projectRoot, configuredDbPath))
+          ? path.resolve(projectRoot, configuredDbPath)
+          : path.resolve(process.cwd(), configuredDbPath)))
+  : (fs.existsSync(path.resolve(projectRoot, 'projectxray.db'))
+      ? path.resolve(projectRoot, 'projectxray.db')
+      : path.resolve(process.cwd(), 'projectxray.db'));
+
 export const ENV = {
   PORT: parseInt(process.env.PORT || '3001', 10),
   NODE_ENV: nodeEnv,
-  DATABASE_PATH: process.env.DATABASE_PATH || path.resolve(process.cwd(), 'projectxray.db'),
+  DATABASE_PATH: resolvedDbPath,
   DATABASE_DIALECT: (process.env.DATABASE_DIALECT || (process.env.DATABASE_URL?.startsWith('postgres') ? 'postgres' : 'sqlite')) as 'sqlite' | 'postgres',
   DATABASE_URL: process.env.DATABASE_URL || '',
   PG_HOST: process.env.PG_HOST || 'localhost',

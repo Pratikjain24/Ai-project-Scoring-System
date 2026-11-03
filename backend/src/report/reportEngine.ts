@@ -43,22 +43,23 @@ export class ReportEngine {
       throw new Error(`Evaluation ${evaluationId} not found`);
     }
 
+    const canonicalId = evaluation.id;
     const project = ProjectRepository.findById(evaluation.projectId);
-    const dna = AssessmentRepository.getProjectDNA(evaluationId);
-    const technical = AssessmentRepository.getTechnicalAssessments(evaluationId);
-    const originality = AssessmentRepository.getOriginalityAssessment(evaluationId);
-    const claims = ClaimRepository.findByEvaluationId(evaluationId);
-    const impact = AssessmentRepository.getImpactAssessment(evaluationId);
-    const feasibility = AssessmentRepository.getFeasibilityAssessment(evaluationId);
-    const presentation = AssessmentRepository.getPresentationAnalysis(evaluationId);
-    const demo = AssessmentRepository.getDemoAnalysis(evaluationId);
-    const risks = AssessmentRepository.getRisks(evaluationId);
-    const recommendations = AssessmentRepository.getRecommendations(evaluationId);
-    const judgeQuestions = AssessmentRepository.getJudgeQuestions(evaluationId);
-    const evidenceList = EvidenceRepository.findByEvaluationId(evaluationId);
-    const juryDecision = JuryRepository.getJuryDecision(evaluationId);
-    const categoryScores = JuryRepository.getCategoryScores(evaluationId);
-    const sources = ReportRepository.getSourcesForReport(evaluationId);
+    const dna = AssessmentRepository.getProjectDNA(canonicalId);
+    const technical = AssessmentRepository.getTechnicalAssessments(canonicalId);
+    const originality = AssessmentRepository.getOriginalityAssessment(canonicalId);
+    const claims = ClaimRepository.findByEvaluationId(canonicalId);
+    const impact = AssessmentRepository.getImpactAssessment(canonicalId);
+    const feasibility = AssessmentRepository.getFeasibilityAssessment(canonicalId);
+    const presentation = AssessmentRepository.getPresentationAnalysis(canonicalId);
+    const demo = AssessmentRepository.getDemoAnalysis(canonicalId);
+    const risks = AssessmentRepository.getRisks(canonicalId);
+    const recommendations = AssessmentRepository.getRecommendations(canonicalId);
+    const judgeQuestions = AssessmentRepository.getJudgeQuestions(canonicalId);
+    const evidenceList = EvidenceRepository.findByEvaluationId(canonicalId);
+    const juryDecision = JuryRepository.getJuryDecision(canonicalId);
+    const categoryScores = JuryRepository.getCategoryScores(canonicalId);
+    const sources = ReportRepository.getSourcesForReport(canonicalId);
 
     // Baseline fallbacks for scores from Master Scoring Engine
     const overallScore = juryDecision ? juryDecision.overallScore : (evaluation.overallScore || 83.7);

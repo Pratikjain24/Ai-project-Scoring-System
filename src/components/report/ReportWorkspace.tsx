@@ -93,8 +93,13 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
     setIsLoading(true);
     try {
       const vers = await api.getReportVersions(evaluationId).catch(() => []);
+      let activeVer = selectedVersion;
       if (vers && vers.length > 0) {
         setVersions(vers);
+        if (!vers.some((v: any) => v.version === selectedVersion)) {
+          activeVer = vers[vers.length - 1].version;
+          setSelectedVersion(activeVer);
+        }
       } else {
         setVersions([
           { version: 1, reportId: 'srv-rep-v1', overallScore: 76.3, verdict: 'PROMISING', confidence: 0.74, coverage: 71.0, status: 'READY', changesSummary: 'Initial automated audit baseline', newEvidenceCount: 0, changedClaimsCount: 0, generatedAt: '2026-08-20T10:00:00Z' },
@@ -103,7 +108,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
         ]);
       }
 
-      const rep = await api.getEvaluationReport(evaluationId, selectedVersion);
+      const rep = await api.getEvaluationReport(evaluationId, activeVer);
       if (rep) {
         setReport(rep);
       }
@@ -227,7 +232,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
       {/* Top Banner */}
       <ReportHeaderBanner
         report={r}
-        onDownloadPdf={() => window.open(api.getReportPdfUrl(evaluationId), '_blank')}
+        onDownloadPdf={() => window.open(api.getReportPdfUrl(evaluationId, selectedVersion), '_blank')}
         onPrint={() => window.print()}
         onShare={() => setShowShareModal(true)}
         onRegenerate={handleRegenerate}

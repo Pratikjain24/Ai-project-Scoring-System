@@ -146,6 +146,22 @@ app.use(errorHandler);
 import { pipelineQueue } from './pipeline/pipelineQueue';
 import { TelemetryBatchQueue } from './live/telemetryBatchQueue';
 
+process.on('uncaughtException', (err) => {
+  logger.error('CRITICAL: Uncaught Exception in server process', {
+    module: 'Server',
+    error: err?.message || String(err),
+    stack: err?.stack,
+  });
+});
+
+process.on('unhandledRejection', (reason: any) => {
+  logger.error('CRITICAL: Unhandled Promise Rejection in server process', {
+    module: 'Server',
+    reason: reason?.message || String(reason),
+    stack: reason?.stack,
+  });
+});
+
 // Start server when executed directly
 const isTestMode = process.env.NODE_ENV === 'test' || process.argv.some(arg => arg.includes('--test') || arg.includes('.test.ts'));
 if (!isTestMode) {

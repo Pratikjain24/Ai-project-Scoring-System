@@ -240,7 +240,17 @@ export const EvaluationWorkspacePage: React.FC = () => {
 
   const handleExport = () => {
     setNotificationMessage('Generating and downloading institutional PDF evaluation dossier...');
-    window.open(api.getReportPdfUrl(evalId), '_blank');
+    const url = api.getReportPdfUrl(evalId);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      // Fallback for pop-up blockers: trigger direct file download
+      const a = document.createElement('a');
+      a.href = api.getReportPdfUrl(evalId, undefined, true);
+      a.download = `ProjectXRay_Report_${evalId}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
     setTimeout(() => setNotificationMessage(null), 4000);
   };
 

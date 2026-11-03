@@ -158,22 +158,35 @@ export class ReportController {
     const evaluationId = req.params.id as string;
     const versionParam = req.query.version as string | undefined;
     const version = versionParam ? parseInt(versionParam, 10) : undefined;
+    const isDownload = req.query.download === 'true';
 
-    let report = ReportRepository.getReport(evaluationId, version);
-    if (!report) {
-      report = ReportEngine.generate(evaluationId, version || 3);
-      ReportRepository.saveReport(report);
+    try {
+      let report = ReportRepository.getReport(evaluationId, version);
+      if (!report) {
+        report = ReportEngine.generate(evaluationId, version || 3);
+        ReportRepository.saveReport(report);
+      }
+
+      const htmlContent = PdfGenerator.generatePrintableHtml(report);
+
+      const dispositionType = isDownload ? 'attachment' : 'inline';
+      const safeProjectName = (report.projectName || 'Evaluation_Report').replace(/[^a-zA-Z0-9_-]+/g, '_');
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader(
+        'Content-Disposition',
+        `${dispositionType}; filename="ProjectXRay_Report_${safeProjectName}_v${report.version || 1}.html"`
+      );
+      res.send(htmlContent);
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: {
+          code: 'REPORT_EXPORT_FAILED',
+          message: err.message || `Failed to export dossier for evaluation ${evaluationId}`,
+        },
+      });
     }
-
-    const htmlContent = PdfGenerator.generatePrintableHtml(report);
-
-    // Send publication-ready printable HTML document
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader(
-      'Content-Disposition',
-      `inline; filename="ProjectXRay_Report_${report.projectName.replace(/\s+/g, '_')}_v${report.version}.html"`
-    );
-    res.send(htmlContent);
   }
 
   /**

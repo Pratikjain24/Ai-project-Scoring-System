@@ -107,7 +107,7 @@ export class ApiService {
     }
   }
 
-  private getAuthToken(): string | null {
+  public getAuthToken(): string | null {
     if (typeof window === 'undefined') return null;
     const token = localStorage.getItem('auth_token');
     if (!token || token === 'usr_lead_evaluator_jwt') {
@@ -1008,10 +1008,14 @@ export class ApiService {
     return this.request<any[]>(`/evaluations/${evaluationId}/report/sources`);
   }
 
-  getReportPdfUrl(evaluationId: string, version?: number): string {
-    return version
-      ? `${API_BASE}/evaluations/${evaluationId}/report/pdf?version=${version}`
-      : `${API_BASE}/evaluations/${evaluationId}/report/pdf`;
+  getReportPdfUrl(evaluationId: string, version?: number, download?: boolean): string {
+    const token = this.getAuthToken();
+    const params = new URLSearchParams();
+    if (version) params.append('version', String(version));
+    if (download) params.append('download', 'true');
+    if (token) params.append('token', token);
+    const qs = params.toString();
+    return `${API_BASE}/evaluations/${encodeURIComponent(evaluationId)}/report/pdf${qs ? `?${qs}` : ''}`;
   }
 
   async createReportShare(evaluationId: string, expiresInDays: number = 30): Promise<any> {
