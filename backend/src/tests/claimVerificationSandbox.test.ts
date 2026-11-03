@@ -1,8 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import {
   SandboxedExecutionEngine,
   DockerContainerRunner,
+  RepositoryBenchmarkInspector,
 } from '../claim-verification/sandboxedExecutionEngine';
 import { ClaimVerificationAgent } from '../agents/claimVerificationAgent';
 import { AdminController } from '../controllers/adminController';
@@ -397,5 +401,189 @@ console.log(${JSON.stringify(junitOutput)});
     assert.ok(latencyBm);
     assert.strictEqual(latencyBm?.measuredValue, 14.2);
     assert.strictEqual(latencyBm?.isVerified, true);
+  });
+
+  it('12. RepositoryBenchmarkInspector discovers manifests (*_test.py, pytest.ini, Cargo.toml, pom.xml, package.json)', () => {
+    const testWs = path.join(os.tmpdir(), `ai_jury_test_repo_${Date.now()}`);
+    fs.mkdirSync(testWs, { recursive: true });
+
+    try {
+      // 1. Python artifacts
+      fs.writeFileSync(path.join(testWs, 'pytest.ini'), '[pytest]\ntestpaths = tests\naddopts = --benchmark-enable\n', 'utf8');
+      fs.writeFileSync(path.join(testWs, 'model_test.py'), 'def test_inference(): pass\n', 'utf8');
+      fs.writeFileSync(path.join(testWs, 'benchmark_throughput.py'), 'def test_benchmark(): pass\n', 'utf8');
+
+      // 2. Node.js artifacts
+      fs.writeFileSync(
+        path.join(testWs, 'package.json'),
+        JSON.stringify({
+          name: 'student-capstone',
+          scripts: { test: 'vitest run', benchmark: 'tinybench' },
+          devDependencies: { vitest: '^1.0.0', tinybench: '^2.0.0' },
+        }),
+        'utf8'
+      );
+      fs.writeFileSync(path.join(testWs, 'api.test.ts'), '// test suite\n', 'utf8');
+
+      // 3. Rust manifest
+      fs.writeFileSync(
+        path.join(testWs, 'Cargo.toml'),
+        '[package]\nname = "engine"\nversion = "0.1.0"\n[[bench]]\nname = "perf"\n',
+        'utf8'
+      );
+
+      // 4. Java manifest
+      fs.writeFileSync(
+        path.join(testWs, 'pom.xml'),
+        '<project><dependencies><dependency><groupId>org.openjdk.jmh</groupId><artifactId>jmh-core</artifactId></dependency></dependencies></project>',
+        'utf8'
+      );
+
+      // 5. Go manifest & test
+      fs.writeFileSync(path.join(testWs, 'go.mod'), 'module capstone/engine\ngo 1.22\n', 'utf8');
+      fs.writeFileSync(path.join(testWs, 'consensus_test.go'), 'package main\n', 'utf8');
+
+      const inspection = RepositoryBenchmarkInspector.inspectRepository(testWs);
+
+      assert.strictEqual(inspection.hasTests, true);
+      assert.strictEqual(inspection.hasBenchmarks, true);
+      assert.ok(inspection.manifests.length >= 5, 'Must detect at least 5 manifests');
+      assert.ok(inspection.testFiles.length >= 4, 'Must detect test files');
+
+      const manifestTypes = inspection.manifests.map((m) => m.manifestType);
+      assert.ok(manifestTypes.includes('pytest.ini'), 'Must detect pytest.ini');
+      assert.ok(manifestTypes.includes('package.json'), 'Must detect package.json');
+      assert.ok(manifestTypes.includes('Cargo.toml'), 'Must detect Cargo.toml');
+      assert.ok(manifestTypes.includes('pom.xml'), 'Must detect pom.xml');
+      assert.ok(manifestTypes.includes('go.mod'), 'Must detect go.mod');
+
+      const benchFiles = inspection.benchmarkFiles.map((b) => path.basename(b.filePath));
+      assert.ok(benchFiles.includes('benchmark_throughput.py'), 'Must tag benchmark files');
+
+      assert.ok(inspection.summary.includes('Repository inspected'));
+    } finally {
+      fs.rmSync(testWs, { recursive: true, force: true });
+    }
+  });
+
+  it('13. SandboxedExecutionEngine.inspectRepository provides direct integration with repository scan', () => {
+    const testWs = path.join(os.tmpdir(), `ai_jury_inspect_repo_${Date.now()}`);
+    fs.mkdirSync(testWs, { recursive: true });
+
+    try {
+      fs.writeFileSync(
+        path.join(testWs, 'package.json'),
+        JSON.stringify({
+          name: 'eval-repo',
+          scripts: { test: 'node runner.test.js' },
+        }),
+        'utf8'
+      );
+      fs.writeFileSync(
+        path.join(testWs, 'runner.test.js'),
+        'console.log("ok 1 - math verified");\n',
+        'utf8'
+      );
+
+      const inspection = SandboxedExecutionEngine.inspectRepository(testWs);
+      assert.strictEqual(inspection.hasTests, true);
+      assert.strictEqual(inspection.primaryRuntime, 'nodejs');
+      assert.strictEqual(inspection.suggestedRunCommand, 'npm test');
+    } finally {
+      fs.rmSync(testWs, { recursive: true, force: true });
+    }
+  });
+
+  it('14. SandboxedExecutionEngine.executeRepositoryHarness executes real repo tests and parses execution metrics', async () => {
+    const testWs = path.join(os.tmpdir(), `ai_jury_exec_repo_${Date.now()}`);
+    fs.mkdirSync(testWs, { recursive: true });
+
+    try {
+      // Create a real runnable Node.js test file
+      const testCode = `
+const assert = require('assert');
+const t0 = performance.now();
+for (let i = 0; i < 10000; i++) {} // Workload
+const t1 = performance.now();
+console.log('ok 1 - dynamic repo unit test passed');
+console.log('ok 2 - assertions complete');
+console.log('[BENCHMARK] latency=' + (t1 - t0).toFixed(2) + 'ms');
+`;
+      fs.writeFileSync(path.join(testWs, 'suite.test.js'), testCode, 'utf8');
+
+      const claim: Claim = {
+        id: 'claim_repo_eval',
+        evaluationId: 'eval_repo',
+        claimText: 'System achieves latency under 20ms',
+        claimType: 'LATENCY',
+        importance: 'HIGH',
+        status: 'UNVERIFIED',
+        confidence: 60,
+        projectEvidence: '',
+        explanation: '',
+        supportingEvidenceIds: [],
+        contradictingEvidenceIds: [],
+        createdAt: new Date().toISOString(),
+      };
+
+      const result = await SandboxedExecutionEngine.executeRepositoryHarness(testWs, 'nodejs', { timeoutMs: 5000 }, claim);
+
+      assert.strictEqual(result.status, 'SUCCESS');
+      assert.ok(result.testsPassed >= 2, 'Should parse passing assertions');
+      assert.strictEqual(result.testsFailed, 0);
+      assert.strictEqual(result.codeSupport, 'SUPPORTED');
+      assert.ok(result.benchmarks.length > 0, 'Should parse real measured benchmarks');
+      assert.ok(result.durationMs >= 0);
+    } finally {
+      fs.rmSync(testWs, { recursive: true, force: true });
+    }
+  });
+
+  it('15. SandboxedExecutionEngine.verifyClaimDynamically executes real empirical timers without fake static strings', async () => {
+    const claim: Claim = {
+      id: 'claim_empirical_bench',
+      evaluationId: 'eval_bench_real',
+      claimText: 'Distributed pipeline achieves latency under 50ms and accuracy of 90%',
+      claimType: 'LATENCY',
+      importance: 'HIGH',
+      status: 'UNVERIFIED',
+      confidence: 65,
+      projectEvidence: '',
+      explanation: '',
+      supportingEvidenceIds: [],
+      contradictingEvidenceIds: [],
+      createdAt: new Date().toISOString(),
+    };
+
+    const res = await SandboxedExecutionEngine.verifyClaimDynamically(claim, 'nodejs');
+    assert.strictEqual(res.executionResult.status, 'SUCCESS');
+    assert.ok(res.executionResult.benchmarks.length >= 2, 'Should measure latency and throughput');
+
+    const latencyBmk = res.executionResult.benchmarks.find((b) => b.metric === 'latency');
+    assert.ok(latencyBmk, 'Latency benchmark must exist');
+    assert.ok(latencyBmk.measuredValue > 0, 'Measured latency must be greater than zero');
+    // Verify it is NOT the old fake static 24.2ms or 21.4ms
+    assert.notStrictEqual(latencyBmk.measuredValue, 24.2, 'Must not be fake 24.2ms mock');
+    assert.notStrictEqual(latencyBmk.measuredValue, 21.4, 'Must not be fake 21.4ms mock');
+
+    const throughputBmk = res.executionResult.benchmarks.find((b) => b.metric === 'throughput');
+    assert.ok(throughputBmk, 'Throughput benchmark must exist');
+    assert.ok(throughputBmk.measuredValue > 0, 'Measured throughput must be positive');
+
+    // Also test when repoPath is supplied in params
+    const testWs = path.join(os.tmpdir(), `ai_jury_dyn_repo_${Date.now()}`);
+    fs.mkdirSync(testWs, { recursive: true });
+    try {
+      fs.writeFileSync(
+        path.join(testWs, 'repo_claim.test.js'),
+        'console.log("ok 1 - repo executed");\nconsole.log("[BENCHMARK] throughput=3500ops/sec");\n',
+        'utf8'
+      );
+      const repoRes = await SandboxedExecutionEngine.verifyClaimDynamically(claim, 'nodejs', { repoPath: testWs });
+      assert.strictEqual(repoRes.executionResult.status, 'SUCCESS');
+      assert.ok(repoRes.executionResult.benchmarks.some((b) => b.metric === 'throughput'));
+    } finally {
+      fs.rmSync(testWs, { recursive: true, force: true });
+    }
   });
 });
