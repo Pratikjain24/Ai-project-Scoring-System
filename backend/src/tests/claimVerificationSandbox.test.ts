@@ -7,6 +7,7 @@ import {
   SandboxedExecutionEngine,
   DockerContainerRunner,
   RepositoryBenchmarkInspector,
+  SandboxUnavailableError,
 } from '../claim-verification/sandboxedExecutionEngine';
 import { ClaimVerificationAgent } from '../agents/claimVerificationAgent';
 import { AdminController } from '../controllers/adminController';
@@ -63,7 +64,10 @@ assert.ok(Array.isArray([1, 2, 3]));
 console.log('ok 2 - array type assertion passed');
 `;
 
-    const result = await SandboxedExecutionEngine.executeCode(code, 'nodejs', { timeoutMs: 3000 });
+    const result = await SandboxedExecutionEngine.executeCode(code, 'nodejs', {
+      timeoutMs: 3000,
+      allowInsecureHostProcessForTesting: true,
+    });
 
     assert.strictEqual(result.status, 'SUCCESS');
     assert.strictEqual(result.exitCode, 0);
@@ -81,7 +85,10 @@ console.log('ok 2 - array type assertion passed');
 while (true) {}
 `;
 
-    const result = await SandboxedExecutionEngine.executeCode(infiniteLoopCode, 'nodejs', { timeoutMs: 500 });
+    const result = await SandboxedExecutionEngine.executeCode(infiniteLoopCode, 'nodejs', {
+      timeoutMs: 500,
+      allowInsecureHostProcessForTesting: true,
+    });
 
     assert.strictEqual(result.status, 'TIMEOUT');
     assert.strictEqual(result.codeSupport, 'NOT_SUPPORTED');
@@ -116,7 +123,7 @@ console.log('ok 2 - benchmark run completed');
     const validResult = await SandboxedExecutionEngine.executeCode(
       passingBenchmarkCode,
       'nodejs',
-      { timeoutMs: 3000 },
+      { timeoutMs: 3000, allowInsecureHostProcessForTesting: true },
       mockClaimValid
     );
 
@@ -137,7 +144,7 @@ console.log('ok 2 - benchmark run completed');
     const contradictedResult = await SandboxedExecutionEngine.executeCode(
       failingBenchmarkCode,
       'nodejs',
-      { timeoutMs: 3000 },
+      { timeoutMs: 3000, allowInsecureHostProcessForTesting: true },
       mockClaimValid
     );
 
@@ -172,7 +179,8 @@ console.log('ok 2 - accuracy threshold met');
 
     const { claim, executionResult } = await ClaimVerificationAgent.verifyClaimWithSandbox(
       mockClaim,
-      testCode
+      testCode,
+      { allowInsecureHostProcessForTesting: true }
     );
 
     assert.strictEqual(executionResult.codeSupport, 'SUPPORTED');
@@ -262,6 +270,7 @@ console.log('[BENCHMARK] response_time=12ms');
         runtime: 'nodejs',
         claimText: 'Microservice response time under 30ms',
         claimType: 'LATENCY',
+        allowInsecureHostProcessForTesting: true,
       },
     };
 
@@ -348,7 +357,9 @@ console.log('[BENCHMARK] response_time=12ms');
     };
 
     // Node test harness execution
-    const nodeRes = await SandboxedExecutionEngine.verifyClaimDynamically(claim, 'nodejs');
+    const nodeRes = await SandboxedExecutionEngine.verifyClaimDynamically(claim, 'nodejs', {
+      allowInsecureHostProcessForTesting: true,
+    });
     assert.strictEqual(nodeRes.executionResult.status, 'SUCCESS');
     assert.strictEqual(nodeRes.executionResult.runtime, 'nodejs');
     assert.ok(nodeRes.executionResult.benchmarks.length > 0);
@@ -389,7 +400,12 @@ Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.42 s - in org.
     const mockJUnitCode = `
 console.log(${JSON.stringify(junitOutput)});
 `;
-    const result = await SandboxedExecutionEngine.executeCode(mockJUnitCode, 'nodejs', { timeoutMs: 3000 }, claim);
+    const result = await SandboxedExecutionEngine.executeCode(
+      mockJUnitCode,
+      'nodejs',
+      { timeoutMs: 3000, allowInsecureHostProcessForTesting: true },
+      claim
+    );
 
     assert.strictEqual(result.status, 'SUCCESS');
     assert.strictEqual(result.testsPassed, 8);
@@ -526,7 +542,12 @@ console.log('[BENCHMARK] latency=' + (t1 - t0).toFixed(2) + 'ms');
         createdAt: new Date().toISOString(),
       };
 
-      const result = await SandboxedExecutionEngine.executeRepositoryHarness(testWs, 'nodejs', { timeoutMs: 5000 }, claim);
+      const result = await SandboxedExecutionEngine.executeRepositoryHarness(
+        testWs,
+        'nodejs',
+        { timeoutMs: 5000, allowInsecureHostProcessForTesting: true },
+        claim
+      );
 
       assert.strictEqual(result.status, 'SUCCESS');
       assert.ok(result.testsPassed >= 2, 'Should parse passing assertions');
@@ -555,7 +576,9 @@ console.log('[BENCHMARK] latency=' + (t1 - t0).toFixed(2) + 'ms');
       createdAt: new Date().toISOString(),
     };
 
-    const res = await SandboxedExecutionEngine.verifyClaimDynamically(claim, 'nodejs');
+    const res = await SandboxedExecutionEngine.verifyClaimDynamically(claim, 'nodejs', {
+      allowInsecureHostProcessForTesting: true,
+    });
     assert.strictEqual(res.executionResult.status, 'SUCCESS');
     assert.ok(res.executionResult.benchmarks.length >= 2, 'Should measure latency and throughput');
 
@@ -579,11 +602,112 @@ console.log('[BENCHMARK] latency=' + (t1 - t0).toFixed(2) + 'ms');
         'console.log("ok 1 - repo executed");\nconsole.log("[BENCHMARK] throughput=3500ops/sec");\n',
         'utf8'
       );
-      const repoRes = await SandboxedExecutionEngine.verifyClaimDynamically(claim, 'nodejs', { repoPath: testWs });
+      const repoRes = await SandboxedExecutionEngine.verifyClaimDynamically(claim, 'nodejs', {
+        repoPath: testWs,
+        allowInsecureHostProcessForTesting: true,
+      });
       assert.strictEqual(repoRes.executionResult.status, 'SUCCESS');
       assert.ok(repoRes.executionResult.benchmarks.some((b) => b.metric === 'throughput'));
     } finally {
       fs.rmSync(testWs, { recursive: true, force: true });
+    }
+  });
+
+  it('16. Disallow Host Process Execution (Strict Fail-Closed Policy): throws SandboxUnavailableError when Docker is unavailable', async () => {
+    // Force Docker availability to false
+    DockerContainerRunner.setDockerAvailableOverride(false);
+
+    try {
+      // 1. Direct code execution must throw SandboxUnavailableError without spawning host process
+      await assert.rejects(
+        async () => {
+          await SandboxedExecutionEngine.executeCode("console.log('insecure host code')", 'nodejs');
+        },
+        (err: any) => {
+          assert.strictEqual(err.name, 'SandboxUnavailableError');
+          assert.strictEqual(
+            err.message,
+            'Docker containerization is required for secure code execution. Host execution is strictly blocked for security.'
+          );
+          return true;
+        }
+      );
+
+      // 2. Repository harness execution must throw SandboxUnavailableError without spawning host process
+      await assert.rejects(
+        async () => {
+          await SandboxedExecutionEngine.executeRepositoryHarness('/tmp/untrusted_repo', 'nodejs');
+        },
+        (err: any) => {
+          assert.strictEqual(err.name, 'SandboxUnavailableError');
+          assert.strictEqual(
+            err.message,
+            'Docker containerization is required for secure code execution. Host execution is strictly blocked for security.'
+          );
+          return true;
+        }
+      );
+
+      // 3. Dynamic claim verification must throw SandboxUnavailableError
+      const untrustedClaim: Claim = {
+        id: 'claim_fail_closed',
+        evaluationId: 'eval_fc',
+        claimText: 'High performance cluster',
+        claimType: 'LATENCY',
+        importance: 'HIGH',
+        status: 'CLAIMED',
+        confidence: 50,
+        projectEvidence: '',
+        explanation: '',
+        supportingEvidenceIds: [],
+        contradictingEvidenceIds: [],
+        createdAt: new Date().toISOString(),
+      };
+
+      await assert.rejects(
+        async () => {
+          await SandboxedExecutionEngine.verifyClaimDynamically(untrustedClaim, 'nodejs');
+        },
+        (err: any) => {
+          assert.strictEqual(err.name, 'SandboxUnavailableError');
+          return true;
+        }
+      );
+
+      // 4. ClaimVerificationAgent handles fail-closed gracefully with NOT_SUPPORTED
+      const agentRes = await ClaimVerificationAgent.verifyClaimWithSandbox(untrustedClaim, "console.log('test')");
+      assert.strictEqual(agentRes.claim.status, 'CLAIMED');
+      assert.strictEqual(agentRes.executionResult.codeSupport, 'NOT_SUPPORTED');
+      assert.ok(agentRes.executionResult.explanation.includes('Docker containerization is required'));
+
+      // 5. AdminController endpoint returns HTTP 503 SANDBOX_UNAVAILABLE
+      const req: any = {
+        body: {
+          code: 'console.log("admin execution")',
+          runtime: 'nodejs',
+        },
+      };
+      let statusCode = 0;
+      let jsonBody: any = null;
+      const res: any = {
+        status(code: number) {
+          statusCode = code;
+          return this;
+        },
+        json(data: any) {
+          jsonBody = data;
+          return this;
+        },
+      };
+
+      await AdminController.executeClaimSandbox(req, res);
+      assert.strictEqual(statusCode, 503);
+      assert.strictEqual(jsonBody?.success, false);
+      assert.strictEqual(jsonBody?.error?.code, 'SANDBOX_UNAVAILABLE');
+      assert.ok(jsonBody?.error?.message.includes('Docker containerization is required'));
+    } finally {
+      // Reset override
+      DockerContainerRunner.setDockerAvailableOverride(null);
     }
   });
 });

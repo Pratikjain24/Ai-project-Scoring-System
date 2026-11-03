@@ -15,7 +15,7 @@ import { ContradictionDetector } from './contradictionDetector';
 import { VerificationScorer } from './verificationScorer';
 import { JudgeQuestionGenerator } from './judgeQuestionGenerator';
 import { ClaimVerificationRepository } from '../repositories/claimVerificationRepository';
-import { SandboxedExecutionEngine } from './sandboxedExecutionEngine';
+import { SandboxedExecutionEngine, SandboxUnavailableError } from './sandboxedExecutionEngine';
 
 export class ClaimVerificationPipeline {
   static async runPipeline(evaluationId: string): Promise<EvaluationClaimsSummary> {
@@ -103,8 +103,17 @@ export class ClaimVerificationPipeline {
 
       // Step F: Document Support & Sandboxed Code Execution Support
       let docSupport: any = suppEvRows.length >= 2 ? 'FULL' : suppEvRows.length === 1 ? 'PARTIAL' : 'NONE';
-      const dynamicCodeResult = await SandboxedExecutionEngine.verifyClaimDynamically(claim, params);
-      const codeSupport: CodeSupportStatus = dynamicCodeResult.codeSupport;
+      let codeSupport: CodeSupportStatus = 'NOT_SUPPORTED';
+      try {
+        const dynamicCodeResult = await SandboxedExecutionEngine.verifyClaimDynamically(claim, params);
+        codeSupport = dynamicCodeResult.codeSupport;
+      } catch (err: any) {
+        if (err instanceof SandboxUnavailableError || err.name === 'SandboxUnavailableError') {
+          codeSupport = 'NOT_SUPPORTED';
+        } else {
+          throw err;
+        }
+      }
 
       // Step G: Claim-specific contradictions
       const claimContradictions = contradictions.filter(

@@ -26,6 +26,21 @@ export {
   type DetectedBenchmarkFile,
 };
 
+/**
+ * Strict Fail-Closed Security Policy:
+ * Thrown whenever code execution is attempted while Docker daemon is unavailable.
+ * Host process execution is strictly disallowed to prevent host compromise.
+ */
+export class SandboxUnavailableError extends Error {
+  constructor(
+    message = 'Docker containerization is required for secure code execution. Host execution is strictly blocked for security.'
+  ) {
+    super(message);
+    this.name = 'SandboxUnavailableError';
+    Object.setPrototypeOf(this, SandboxUnavailableError.prototype);
+  }
+}
+
 const sandboxLogger = createModuleLogger('SandboxedExecutionEngine');
 
 export type ExecutionRuntime = 'nodejs' | 'python' | 'java' | 'shell' | 'rust' | 'go' | 'cpp';
@@ -39,6 +54,7 @@ export interface SandboxLimits {
   readOnlyRoot?: boolean;    // Default: true
   maxStdoutBytes?: number;   // Default: 65536 (64KB)
   usePrebuiltRunners?: boolean; // Default: true for prebuilt catalog images (runner-python:3.11, etc.)
+  allowInsecureHostProcessForTesting?: boolean; // Default: false (STRICT: only permitted when NODE_ENV === 'test')
 }
 
 export interface DynamicBenchmarkResult {
@@ -315,6 +331,7 @@ export class SandboxedExecutionEngine {
     readOnlyRoot: true,
     maxStdoutBytes: 65536,
     usePrebuiltRunners: true,
+    allowInsecureHostProcessForTesting: false,
   };
 
   /**
@@ -359,6 +376,14 @@ export class SandboxedExecutionEngine {
     };
     const executionId = `sbx_repo_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const startTime = Date.now();
+
+    if (!DockerContainerRunner.isDockerAvailable()) {
+      if (!limits.allowInsecureHostProcessForTesting) {
+        throw new SandboxUnavailableError(
+          'Docker containerization is required for secure code execution. Host execution is strictly blocked for security.'
+        );
+      }
+    }
 
     if (!inspection.hasTests && inspection.manifests.length === 0) {
       return {
@@ -551,7 +576,12 @@ export class SandboxedExecutionEngine {
     const repoPath = params?.repoPath || params?.workspaceDir || (claim as any).repoPath || (claim as any).workspaceDir;
     if (repoPath && typeof repoPath === 'string' && fs.existsSync(repoPath)) {
       sandboxLogger.info(`Inspecting and executing real student repository at: ${repoPath}`);
-      const executionResult = await this.executeRepositoryHarness(repoPath, runtime, { timeoutMs: 8000 }, claim);
+      const executionResult = await this.executeRepositoryHarness(
+        repoPath,
+        runtime,
+        { timeoutMs: 8000, allowInsecureHostProcessForTesting: params?.allowInsecureHostProcessForTesting },
+        claim
+      );
       return {
         claim,
         codeSupport: executionResult.codeSupport,
@@ -753,7 +783,12 @@ console.log('ok 2 - assertions verified');
         break;
     }
 
-    const executionResult = await this.executeCode(testHarness, runtime, { timeoutMs: 3000 }, claim);
+    const executionResult = await this.executeCode(
+      testHarness,
+      runtime,
+      { timeoutMs: 3000, allowInsecureHostProcessForTesting: params?.allowInsecureHostProcessForTesting },
+      claim
+    );
     return {
       claim,
       codeSupport: executionResult.codeSupport,
@@ -803,8 +838,12 @@ console.log('ok 2 - assertions verified');
       let result: SandboxExecutionResult;
       if (dockerAvailable) {
         result = await this.executeInDocker(executionId, tempDir, scriptName, runtime, limits, claimToVerify);
-      } else {
+      } else if (limits.allowInsecureHostProcessForTesting) {
         result = await this.executeInIsolatedProcess(executionId, tempDir, scriptPath, runtime, limits, claimToVerify);
+      } else {
+        throw new SandboxUnavailableError(
+          'Docker containerization is required for secure code execution. Host execution is strictly blocked for security.'
+        );
       }
 
       return result;

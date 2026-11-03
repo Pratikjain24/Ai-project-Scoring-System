@@ -3,6 +3,7 @@ import type { ResearchFinding } from '../models/research';
 import type { Evidence } from '../models/evidence';
 import {
   SandboxedExecutionEngine,
+  SandboxUnavailableError,
   type SandboxExecutionResult,
   type SandboxLimits,
   type SandboxStatusReport,
@@ -49,9 +50,37 @@ export class ClaimVerificationAgent {
     runtime: ExecutionRuntime = 'nodejs'
   ): Promise<{ claim: Claim; executionResult: SandboxExecutionResult }> {
     const code = testCode || '';
-    const executionResult = code
-      ? await SandboxedExecutionEngine.executeCode(code, runtime, limits, claim)
-      : (await SandboxedExecutionEngine.verifyClaimDynamically(claim, runtime)).executionResult!;
+    let executionResult: SandboxExecutionResult;
+    try {
+      executionResult = code
+        ? await SandboxedExecutionEngine.executeCode(code, runtime, limits, claim)
+        : (await SandboxedExecutionEngine.verifyClaimDynamically(claim, runtime)).executionResult!;
+    } catch (err: any) {
+      if (err instanceof SandboxUnavailableError || err.name === 'SandboxUnavailableError') {
+        logger.warn('Sandbox code execution blocked: Docker unavailable (strict fail-closed policy)', {
+          claimId: claim.id,
+        });
+        executionResult = {
+          executionId: `sbx_blocked_${Date.now()}`,
+          mode: 'DOCKER',
+          runtime,
+          status: 'FAILURE',
+          exitCode: 1,
+          durationMs: 0,
+          memoryUsedMb: 0,
+          stdout: '',
+          stderr: err.message,
+          testsPassed: 0,
+          testsFailed: 1,
+          testsTotal: 1,
+          benchmarks: [],
+          codeSupport: 'NOT_SUPPORTED',
+          explanation: err.message,
+        };
+      } else {
+        throw err;
+      }
+    }
 
     let updatedStatus = claim.status;
     let updatedConfidence = claim.confidence;

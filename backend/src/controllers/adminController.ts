@@ -19,7 +19,7 @@ import { AcademicVectorRepository } from '../research-intelligence/academicVecto
 import { OriginalityAgent } from '../agents/originalityAgent';
 import { SemanticOriginalityEngine } from '../originality-intelligence/semanticOriginalityEngine';
 import { ClaimVerificationAgent } from '../agents/claimVerificationAgent';
-import { SandboxedExecutionEngine } from '../claim-verification/sandboxedExecutionEngine';
+import { SandboxedExecutionEngine, SandboxUnavailableError } from '../claim-verification/sandboxedExecutionEngine';
 import { PresentationAgent } from '../agents/presentationAgent';
 import { PresentationForensicsEngine, NativePcmDspAcousticEngine } from '../presentation-forensics/acousticForensicsEngine';
 import { LiveJuryEngine } from '../live/liveJuryEngine';
@@ -671,7 +671,14 @@ export class AdminController {
    * On-demand execution of dynamic test suite / benchmark in sandbox
    */
   static async executeClaimSandbox(req: Request, res: Response): Promise<void> {
-    const { code, runtime = 'nodejs', timeoutMs = 5000, claimText, claimType = 'PERFORMANCE' } = req.body || {};
+    const {
+      code,
+      runtime = 'nodejs',
+      timeoutMs = 5000,
+      claimText,
+      claimType = 'PERFORMANCE',
+      allowInsecureHostProcessForTesting,
+    } = req.body || {};
 
     if (!code) {
       res.status(400).json({
@@ -700,7 +707,7 @@ export class AdminController {
       const result = await SandboxedExecutionEngine.executeCode(
         code,
         runtime,
-        { timeoutMs },
+        { timeoutMs, allowInsecureHostProcessForTesting },
         mockClaim
       );
 
@@ -709,6 +716,13 @@ export class AdminController {
         data: result,
       });
     } catch (err: any) {
+      if (err instanceof SandboxUnavailableError || err.name === 'SandboxUnavailableError') {
+        res.status(503).json({
+          success: false,
+          error: { code: 'SANDBOX_UNAVAILABLE', message: err.message },
+        });
+        return;
+      }
       res.status(500).json({
         success: false,
         error: { code: 'SANDBOX_EXECUTION_FAILED', message: err?.message || 'Failed to execute code in sandbox' },
