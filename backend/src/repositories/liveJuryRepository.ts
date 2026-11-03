@@ -1,4 +1,5 @@
 import { db } from '../db/database';
+import { TelemetryBatchQueue } from '../live/telemetryBatchQueue';
 import type {
   LiveJurySession,
   LiveEvent,
@@ -88,7 +89,12 @@ export class LiveJuryRepository {
   getSession(sessionId: string): LiveJurySession | null {
     const row = db.get<any>(`SELECT * FROM live_jury_sessions WHERE id = ?`, sessionId);
     if (!row) return null;
-    return this.mapSessionRow(row);
+    const session = this.mapSessionRow(row);
+    const pendingElapsed = TelemetryBatchQueue.getInstance().getPendingSessionElapsed(sessionId);
+    if (pendingElapsed !== undefined && pendingElapsed > session.currentElapsedSeconds) {
+      session.currentElapsedSeconds = pendingElapsed;
+    }
+    return session;
   }
 
   getSessionByEvaluation(evaluationId: string): LiveJurySession | null {
@@ -97,7 +103,12 @@ export class LiveJuryRepository {
       evaluationId
     );
     if (!row) return null;
-    return this.mapSessionRow(row);
+    const session = this.mapSessionRow(row);
+    const pendingElapsed = TelemetryBatchQueue.getInstance().getPendingSessionElapsed(session.id);
+    if (pendingElapsed !== undefined && pendingElapsed > session.currentElapsedSeconds) {
+      session.currentElapsedSeconds = pendingElapsed;
+    }
+    return session;
   }
 
   updateSession(sessionId: string, updates: Partial<LiveJurySession>): LiveJurySession | null {
@@ -182,7 +193,7 @@ export class LiveJuryRepository {
       limit
     );
 
-    return rows.map(r => ({
+    const persisted: LiveEvent[] = rows.map(r => ({
       id: r.id,
       sessionId: r.session_id,
       timestampMs: r.timestamp_ms,
@@ -194,6 +205,24 @@ export class LiveJuryRepository {
       metadata: r.metadata_json ? JSON.parse(r.metadata_json) : undefined,
       createdAt: r.created_at
     }));
+
+    const pending = TelemetryBatchQueue.getInstance().getPendingEvents(sessionId);
+    if (pending.length === 0) {
+      return persisted;
+    }
+
+    const map = new Map<string, LiveEvent>();
+    for (const ev of persisted) {
+      map.set(ev.id, ev);
+    }
+    for (const ev of pending) {
+      if (!map.has(ev.id)) {
+        map.set(ev.id, ev);
+      }
+    }
+
+    const merged = Array.from(map.values()).sort((a, b) => a.timestampMs - b.timestampMs);
+    return merged.slice(0, limit);
   }
 
   addObservation(obs: Omit<LiveObservation, 'id' | 'createdAt'>): LiveObservation {
@@ -231,7 +260,7 @@ export class LiveJuryRepository {
       sessionId
     );
 
-    return rows.map(r => ({
+    const persisted: LiveObservation[] = rows.map(r => ({
       id: r.id,
       sessionId: r.session_id,
       timestampMs: r.timestamp_ms,
@@ -244,6 +273,23 @@ export class LiveJuryRepository {
       evidenceId: r.evidence_id || undefined,
       createdAt: r.created_at
     }));
+
+    const pending = TelemetryBatchQueue.getInstance().getPendingObservations(sessionId);
+    if (pending.length === 0) {
+      return persisted;
+    }
+
+    const map = new Map<string, LiveObservation>();
+    for (const obs of persisted) {
+      map.set(obs.id, obs);
+    }
+    for (const obs of pending) {
+      if (!map.has(obs.id)) {
+        map.set(obs.id, obs);
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) => a.timestampMs - b.timestampMs);
   }
 
   addTranscriptSegment(seg: Omit<LiveTranscriptSegment, 'id' | 'createdAt'>): LiveTranscriptSegment {

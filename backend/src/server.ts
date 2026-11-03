@@ -144,6 +144,7 @@ if (fs.existsSync(distPath) && ENV.NODE_ENV === 'production') {
 app.use(errorHandler);
 
 import { pipelineQueue } from './pipeline/pipelineQueue';
+import { TelemetryBatchQueue } from './live/telemetryBatchQueue';
 
 // Start server when executed directly
 const isTestMode = process.env.NODE_ENV === 'test' || process.argv.some(arg => arg.includes('--test') || arg.includes('.test.ts'));
@@ -152,6 +153,9 @@ if (!isTestMode) {
   pipelineQueue.init({ role: ENV.APP_ROLE }).catch((qErr) => {
     logger.error('Pipeline queue initialization error', { module: 'Server', error: qErr });
   });
+
+  // Start background batched telemetry flush worker (flushes every 5s to eliminate SQLITE_BUSY)
+  TelemetryBatchQueue.getInstance().startWorker(5000);
 
   const server = app.listen(ENV.PORT, '0.0.0.0', () => {
     logger.info('🚀 PROJECTX-RAY AI Backend Server Active', {
@@ -164,8 +168,9 @@ if (!isTestMode) {
     });
   });
 
-  process.on('SIGTERM', async () => {
+  const shutdown = async () => {
     try {
+      TelemetryBatchQueue.getInstance().stopWorker();
       await pipelineQueue.close();
       await closeRateLimiterRedis();
     } catch {
@@ -174,5 +179,8 @@ if (!isTestMode) {
     server.close(() => {
       logger.info('ProjectX-Ray server terminated gracefully.', { module: 'Server' });
     });
-  });
+  };
+
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 }

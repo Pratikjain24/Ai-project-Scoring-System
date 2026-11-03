@@ -26,6 +26,7 @@ import {
   type RingBufferStats,
   type PresenterTelemetrySummary
 } from './telemetryRingBuffer';
+import { TelemetryBatchQueue } from './telemetryBatchQueue';
 
 const liveLogger = createModuleLogger('LiveJuryEngine');
 
@@ -41,9 +42,11 @@ export class LiveJuryEngine {
   public static readonly MAX_TELEMETRY_BUFFER_SIZE = 100;
   private telemetryRingBuffers: Map<string, TelemetryRingBuffer<LivePresenterTrackingMetrics>> = new Map();
   private latestVisualTelemetry: Map<string, { metrics: LivePresenterTrackingMetrics; count: number }> = new Map();
+  private batchQueue: TelemetryBatchQueue;
 
-  constructor(repository?: LiveJuryRepository) {
+  constructor(repository?: LiveJuryRepository, batchQueue?: TelemetryBatchQueue) {
     this.repository = repository || new LiveJuryRepository();
+    this.batchQueue = batchQueue || TelemetryBatchQueue.getInstance();
   }
 
   static getInstance(): LiveJuryEngine {
@@ -447,15 +450,15 @@ export class LiveJuryEngine {
     const timestampMs = (elapsedSeconds || Math.round((telemetry.timestampMs || Date.now()) / 1000)) * 1000;
     const timestampFormatted = this.formatTime(Math.round(timestampMs / 1000));
 
-    // Update session elapsed time if greater
+    // Update session elapsed time if greater (batched into memory/redis stream)
     const session = this.repository.getSession(sessionId);
     if (session && elapsedSeconds > session.currentElapsedSeconds) {
-      this.repository.updateSession(sessionId, { currentElapsedSeconds: elapsedSeconds });
+      this.batchQueue.enqueueSessionElapsed(sessionId, elapsedSeconds);
     }
 
     // 1. Check Gaze Warnings
     if (telemetry.faceDetected && telemetry.eyeContactScore < 40 && telemetry.gazeStatus === 'LOOKING_DOWN') {
-      const gazeEv = this.repository.addEvent({
+      const gazeEv = this.batchQueue.createEvent({
         sessionId,
         timestampMs,
         timestampFormatted,
@@ -466,8 +469,9 @@ export class LiveJuryEngine {
         metadata: { gazeStatus: telemetry.gazeStatus, eyeContactScore: telemetry.eyeContactScore }
       });
       this.emitEvent(gazeEv);
+      this.batchQueue.enqueueEvent(gazeEv);
 
-      this.repository.addObservation({
+      const gazeObs = this.batchQueue.createObservation({
         sessionId,
         timestampMs,
         timestampFormatted,
@@ -477,8 +481,9 @@ export class LiveJuryEngine {
         severity: 'WARNING',
         confidence: 0.90
       });
+      this.batchQueue.enqueueObservation(gazeObs);
     } else if (telemetry.faceDetected && telemetry.gazeStatus === 'LOOKING_AWAY') {
-      const gazeEv = this.repository.addEvent({
+      const gazeEv = this.batchQueue.createEvent({
         sessionId,
         timestampMs,
         timestampFormatted,
@@ -489,11 +494,12 @@ export class LiveJuryEngine {
         metadata: { gazeStatus: telemetry.gazeStatus, headPose: telemetry.headPose }
       });
       this.emitEvent(gazeEv);
+      this.batchQueue.enqueueEvent(gazeEv);
     }
 
     // 2. Check Posture Alerts
     if (telemetry.postureStatus === 'SLUMPED' && telemetry.postureStability < 60) {
-      const postureEv = this.repository.addEvent({
+      const postureEv = this.batchQueue.createEvent({
         sessionId,
         timestampMs,
         timestampFormatted,
@@ -504,8 +510,9 @@ export class LiveJuryEngine {
         metadata: { postureStatus: telemetry.postureStatus, stability: telemetry.postureStability }
       });
       this.emitEvent(postureEv);
+      this.batchQueue.enqueueEvent(postureEv);
 
-      this.repository.addObservation({
+      const postureObs = this.batchQueue.createObservation({
         sessionId,
         timestampMs,
         timestampFormatted,
@@ -515,6 +522,7 @@ export class LiveJuryEngine {
         severity: 'WARNING',
         confidence: 0.89
       });
+      this.batchQueue.enqueueObservation(postureObs);
     }
 
     // 3. Check Slide Transitions & Dwell Times
@@ -522,7 +530,7 @@ export class LiveJuryEngine {
       const isRushed = telemetry.slideDwellTimeSeconds > 0 && telemetry.slideDwellTimeSeconds < 15;
       const isLingering = telemetry.slideDwellTimeSeconds > 180;
       
-      const slideEv = this.repository.addEvent({
+      const slideEv = this.batchQueue.createEvent({
         sessionId,
         timestampMs,
         timestampFormatted,
@@ -538,9 +546,10 @@ export class LiveJuryEngine {
         }
       });
       this.emitEvent(slideEv);
+      this.batchQueue.enqueueEvent(slideEv);
 
       if (isRushed && telemetry.slideNumber > 1) {
-        this.repository.addObservation({
+        const rushedObs = this.batchQueue.createObservation({
           sessionId,
           timestampMs,
           timestampFormatted,
@@ -550,8 +559,9 @@ export class LiveJuryEngine {
           severity: 'WARNING',
           confidence: 0.93
         });
+        this.batchQueue.enqueueObservation(rushedObs);
       } else if (isLingering) {
-        this.repository.addObservation({
+        const lingerObs = this.batchQueue.createObservation({
           sessionId,
           timestampMs,
           timestampFormatted,
@@ -561,11 +571,12 @@ export class LiveJuryEngine {
           severity: 'INFO',
           confidence: 0.90
         });
+        this.batchQueue.enqueueObservation(lingerObs);
       }
     }
 
     // 4. Primary Telemetry Event
-    const primaryEvent = this.repository.addEvent({
+    const primaryEvent = this.batchQueue.createEvent({
       sessionId,
       timestampMs,
       timestampFormatted,
@@ -576,8 +587,11 @@ export class LiveJuryEngine {
       metadata: { ...telemetry }
     });
     this.emitEvent(primaryEvent);
+    this.batchQueue.enqueueEvent(primaryEvent);
 
-    // 5. Ingest into bounded sliding window ring buffer with FIFO eviction (Max 100 entries per session)
+    // 5. Ingest into telemetry batch queue metrics and bounded sliding window ring buffer
+    this.batchQueue.recordFrameIngested(sessionId, telemetry, elapsedSeconds);
+
     let ringBuffer = this.telemetryRingBuffers.get(sessionId);
     if (!ringBuffer) {
       ringBuffer = new TelemetryRingBuffer<LivePresenterTrackingMetrics>({
@@ -701,6 +715,9 @@ export class LiveJuryEngine {
    * Finalize Live Session and link into Phase 1-10 Scoring & Report Engines
    */
   async finalizeSession(sessionId: string): Promise<LiveSessionFinalizationResult> {
+    // Flush all pending batched telemetry to SQLite before session closure
+    this.batchQueue.flushSessionSync(sessionId);
+
     const session = this.repository.getSession(sessionId);
     if (!session) {
       throw new Error(`Live jury session not found: ${sessionId}`);

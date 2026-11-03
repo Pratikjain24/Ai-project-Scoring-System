@@ -24,6 +24,7 @@ import { PresentationAgent } from '../agents/presentationAgent';
 import { PresentationForensicsEngine, NativePcmDspAcousticEngine } from '../presentation-forensics/acousticForensicsEngine';
 import { LiveJuryEngine } from '../live/liveJuryEngine';
 import { LiveJuryRepository } from '../repositories/liveJuryRepository';
+import { TelemetryBatchQueue } from '../live/telemetryBatchQueue';
 import type { LivePresenterTrackingMetrics } from '../models/liveJury';
 import { JuryDeliberationAgent } from '../agents/juryDeliberationAgent';
 import { TokenBlacklistService } from '../services/tokenBlacklistService';
@@ -814,6 +815,7 @@ export class AdminController {
             maxBufferSizePerSession: LiveJuryEngine.MAX_TELEMETRY_BUFFER_SIZE,
             evictionPolicy: 'FIFO_SLIDING_WINDOW'
           },
+          batchQueue: TelemetryBatchQueue.getInstance().getStats(),
           timestamp: new Date().toISOString()
         }
       });
