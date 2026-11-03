@@ -119,6 +119,7 @@ export const CameraFeedPanel: React.FC<CameraFeedPanelProps> = ({
       onMetricsUpdate: (m) => {
         if (!isMountedRef.current) return;
         setAudioMetrics(m);
+        trackerRef.current?.setAudioMetrics(m);
       },
     });
     audioFilterRef.current = noiseFilter;
@@ -149,8 +150,8 @@ export const CameraFeedPanel: React.FC<CameraFeedPanelProps> = ({
         if (isMountedRef.current && sessionId === activeSessionIdRef.current) {
           setUsingRealWebcam(false);
           setIsAcquiring(false);
-          setCameraError('WebRTC camera API not available in this environment. Hardware test bench engaged.');
-          tracker.startSimulation();
+          setCameraError('WebRTC camera API not available in this environment. Telemetry tagged UNVERIFIED_HARDWARE_FAULT.');
+          tracker.startSimulation({ isPenaltyMode: true, maxScoreCap: 50.0 });
         }
         return;
       }
@@ -187,6 +188,19 @@ export const CameraFeedPanel: React.FC<CameraFeedPanelProps> = ({
           stopMediaStreamTracks(streamRef.current, 'CameraFeed-Superseded');
         }
         streamRef.current = stream;
+
+        // Attach hardware interruption listener (USB yank, device revoke)
+        stream.getVideoTracks().forEach((track) => {
+          track.onended = () => {
+            console.warn('[CameraFeed] ⚠️ Hardware track ended unexpectedly (USB yanked).');
+            if (isMountedRef.current) {
+              setCameraError('Webcam disconnected. Please reconnect your video hardware.');
+              setUsingRealWebcam(false);
+              tracker.stop();
+              tracker.startSimulation({ isPenaltyMode: true, maxScoreCap: 50.0 });
+            }
+          };
+        });
 
         // 5. Bind stream to HTMLVideoElement
         if (videoRef.current && isMountedRef.current) {
@@ -227,9 +241,9 @@ export const CameraFeedPanel: React.FC<CameraFeedPanelProps> = ({
           if (error.name === 'NotAllowedError') {
             errorMsg = 'Camera permission denied. Please allow camera permissions in browser settings.';
           } else if (error.name === 'NotFoundError') {
-            errorMsg = 'No camera hardware detected. Hardware test bench engaged.';
+            errorMsg = 'No camera hardware detected. Hardware test bench engaged (UNVERIFIED).';
           } else if (error.name === 'NotReadableError') {
-            errorMsg = 'Camera hardware locked by another application or tab. Hardware test bench engaged.';
+            errorMsg = 'Camera hardware locked by another application or tab. Hardware test bench engaged (UNVERIFIED).';
           } else if (error.name === 'NotSupportedError') {
             errorMsg = 'Camera access requires a secure origin (HTTPS or localhost).';
           } else if (error.name === 'AbortError') {
@@ -245,8 +259,8 @@ export const CameraFeedPanel: React.FC<CameraFeedPanelProps> = ({
           setCameraError(errorMsg);
           setUsingRealWebcam(false);
           setIsAcquiring(false);
-          // Fall back gracefully to simulation mode
-          tracker.startSimulation();
+          // Disarm simulation exploit: engage penalty mode with 50% cap
+          tracker.startSimulation({ isPenaltyMode: true, maxScoreCap: 50.0 });
         }
       }
     }
@@ -434,6 +448,17 @@ export const CameraFeedPanel: React.FC<CameraFeedPanelProps> = ({
                     <span className="text-cyan-300">IMU 200Hz OK</span>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* Unverified Telemetry Hardware Fault Badge */}
+            {((metrics?.unverifiedHardwareFault) || (!usingRealWebcam && cameraError)) && (
+              <div 
+                data-testid="unverified-hardware-badge"
+                className="absolute top-4 left-4 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-950/90 border border-red-500/60 text-red-200 text-xs font-mono shadow-xl backdrop-blur-md"
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                <span>UNVERIFIED_HARDWARE_FAULT // VISUAL RUBRIC CAPPED AT 50%</span>
               </div>
             )}
 

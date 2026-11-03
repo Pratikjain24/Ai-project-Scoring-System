@@ -11,11 +11,12 @@ import type {
   PresenterGazeStatus,
   PresenterPostureStatus,
   GestureActivityLevel,
-  LightingQuality,
   TrackedPresenterFace,
   FaceMeshLandmarks,
   BlazePoseKeypoints
 } from '../types/liveJury';
+import type { AudioFilterMetrics } from './audioNoiseFilter';
+import { processFramePixelsInWorker } from './visionWorker';
 
 export interface Quaternion3D {
   w: number;
@@ -118,6 +119,11 @@ export class PresenterVisionTracker {
   // Synthetic multi-presenter simulation state
   private simTime: number = 0;
 
+  // Audio-visual correlation & simulation disarm states
+  private audioMetrics: AudioFilterMetrics | null = null;
+  private isPenaltySimulation: boolean = false;
+  private maxScoreCap: number = 100.0;
+
   constructor(options: PresenterTrackerOptions = {}) {
     this.options = options;
     this.maxPresenters = options.maxPresenters || 5;
@@ -142,6 +148,27 @@ export class PresenterVisionTracker {
     } catch (_) {
       this.isWebGLAvailable = false;
     }
+  }
+
+  /**
+   * Sets real-time audio telemetry metrics to correlate acoustic RMS energy with optical mouth movement
+   */
+  public setAudioMetrics(metrics: AudioFilterMetrics | null): void {
+    this.audioMetrics = metrics;
+  }
+
+  /**
+   * Returns current audio telemetry metrics
+   */
+  public getAudioMetrics(): AudioFilterMetrics | null {
+    return this.audioMetrics;
+  }
+
+  /**
+   * Checks whether penalty mode is engaged
+   */
+  public isPenaltyMode(): boolean {
+    return this.isPenaltySimulation;
   }
 
   /**
@@ -511,12 +538,16 @@ export class PresenterVisionTracker {
   }
 
   /**
-   * Explicitly starts simulation mode without querying hardware
+   * Explicitly starts simulation mode without querying hardware.
+   * If isPenaltyMode is set (e.g. on hardware failure), telemetry is explicitly tagged as UNVERIFIED_HARDWARE_FAULT
+   * and visual delivery scores are strictly capped (default 50.0).
    */
-  startSimulation(): void {
+  startSimulation(options?: { isPenaltyMode?: boolean; maxScoreCap?: number }): void {
     this.stop();
     this.currentOpId++;
-    console.log('[PresenterTracker] Explicitly engaged simulation loop');
+    this.isPenaltySimulation = !!options?.isPenaltyMode;
+    this.maxScoreCap = options?.maxScoreCap ?? (this.isPenaltySimulation ? 50.0 : 100.0);
+    console.log(`[PresenterTracker] Explicitly engaged simulation loop (penaltyMode=${this.isPenaltySimulation}, maxScoreCap=${this.maxScoreCap})`);
     this.startLoop();
   }
 
@@ -553,6 +584,8 @@ export class PresenterVisionTracker {
     this.persistentTracks.clear();
     this.leadCandidateId = null;
     this.leadCandidateFrames = 0;
+    this.isPenaltySimulation = false;
+    this.maxScoreCap = 100.0;
   }
 
   /**
@@ -679,105 +712,15 @@ export class PresenterVisionTracker {
     const frameData = ctx.getImageData(0, 0, width, height);
     const pixels = frameData.data;
 
-    // 1. Dynamic Lighting & Ambient Luminance Normalization
-    let totalLuma = 0;
-    const sampleStep = 6;
-    let sampleCount = 0;
-    for (let i = 0; i < pixels.length; i += 4 * sampleStep) {
-      const luma = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2];
-      totalLuma += luma;
-      sampleCount++;
-    }
-    const avgLuma = sampleCount > 0 ? totalLuma / sampleCount : 120;
-    const lightingQuality: LightingQuality =
-      avgLuma < 38 ? 'TOO_DARK' : avgLuma > 225 ? 'TOO_BRIGHT' : 'GOOD';
+    // 1. Dynamic Lighting & Multi-Subject Aperture Clustering via YCbCr Adaptive Color Segmentation
+    // Decouples Luminance (Y) from Chrominance (Cb, Cr) ensuring sensitivity across Fitzpatrick Types I-VI
+    const { detections, lightingQuality } = processFramePixelsInWorker(pixels, width, height, this.maxPresenters);
+    const activeDetections = detections;
 
-    // Adaptive skin gain compensation based on room lighting
-    const lumaFactor = Math.max(0.75, Math.min(1.35, 128 / (avgLuma + 10)));
-
-    // 2. Multi-Subject Stage Aperture Clustering (Supporting up to 5 concurrent presenters)
-    const horizontalProfile = new Int32Array(width);
-    const yMinBound = Math.floor(height * 0.1);
-    const yMaxBound = Math.floor(height * 0.9);
-
-    for (let y = yMinBound; y < yMaxBound; y += 4) {
-      for (let x = 0; x < width; x += 4) {
-        const idx = (y * width + x) * 4;
-        const r = pixels[idx] * lumaFactor;
-        const g = pixels[idx + 1] * lumaFactor;
-        const b = pixels[idx + 2] * lumaFactor;
-        const sumRGB = r + g + b + 0.001;
-
-        const nr = r / sumRGB;
-        const ng = g / sumRGB;
-
-        const isSkin = (
-          nr > 0.34 && nr < 0.58 &&
-          ng > 0.26 && ng < 0.38 &&
-          nr > ng &&
-          Math.abs(r - g) > 8 &&
-          r > 45 && g > 25 && b > 15
-        );
-
-        if (isSkin) {
-          horizontalProfile[x]++;
-        }
-      }
-    }
-
-    // Identify candidate peaks across the horizontal profile
-    interface RawPresenterDetection {
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      centerX: number;
-      centerY: number;
-      pixelCount: number;
-    }
-
-    const detections: RawPresenterDetection[] = [];
-    const minClusterWidth = 28;
-    let clusterStart: number | null = null;
-    let clusterSum = 0;
-
-    for (let x = 0; x < width; x++) {
-      const val = horizontalProfile[x];
-      if (val > 2) {
-        if (clusterStart === null) clusterStart = x;
-        clusterSum += val;
-      } else if (clusterStart !== null) {
-        const clusterW = x - clusterStart;
-        if (clusterW >= minClusterWidth && clusterSum > 35) {
-          const cX = clusterStart + clusterW / 2;
-          const boxW = Math.max(45, Math.min(115, clusterW * 1.2));
-          const boxH = Math.min(height * 0.75, boxW * 1.35);
-          const boxY = Math.max(8, height * 0.22);
-          const boxX = Math.max(0, Math.min(width - boxW, cX - boxW / 2));
-
-          detections.push({
-            x: boxX,
-            y: boxY,
-            width: boxW,
-            height: boxH,
-            centerX: cX,
-            centerY: boxY + boxH * 0.4,
-            pixelCount: clusterSum
-          });
-        }
-        clusterStart = null;
-        clusterSum = 0;
-      }
-    }
-
-    // Cap detections to maxPresenters (up to 5) sorted by pixel density
-    detections.sort((a, b) => b.pixelCount - a.pixelCount);
-    const activeDetections = detections.slice(0, this.maxPresenters);
-
-    // 3. Update Persistent Multi-Subject Spatial Tracker (IoU + Centroid Association)
+    // 2. Update Persistent Multi-Subject Spatial Tracker (IoU + Centroid Association)
     this.updatePersistentTracks(activeDetections, width, height);
 
-    // 4. Select Primary / Lead Presenter using Anti-Oscillation Hysteresis
+    // 3. Select Primary / Lead Presenter using Anti-Oscillation Hysteresis
     const primaryTrack = this.resolvePrimaryPresenter(width);
 
     // Calculate Team Speaking Distribution and Normalized Shannon Entropy Balance Score
@@ -875,7 +818,10 @@ export class PresenterVisionTracker {
       activePresenterId: this.activeLeadPresenterId,
       trackedPresenters: detectedFaces,
       speakingDistribution: distributionMap,
-      teamSpeakingBalanceScore
+      teamSpeakingBalanceScore,
+      telemetryVerified: true,
+      unverifiedHardwareFault: false,
+      visualDeliveryStatus: 'VERIFIED'
     };
   }
 
@@ -994,8 +940,8 @@ export class PresenterVisionTracker {
       trackAge: 1,
       timeSinceUpdate: 0,
       hits: 1,
-      speakingConfidence: isFirst ? 0.8 : 0.2,
-      speakingTicks: isFirst ? 10 : 2,
+      speakingConfidence: 0.20,
+      speakingTicks: 1,
       speakingSharePercent: isFirst ? 100 : 0
     };
   }
@@ -1098,9 +1044,12 @@ export class PresenterVisionTracker {
     const mouthDist = Math.abs(track.landmarks.mouthCenter.y - track.landmarks.noseTip.y);
     const expectedDist = track.height * 0.20;
     const mouthDelta = Math.abs(mouthDist - expectedDist) / (expectedDist + 0.001);
-    const isSpeaking = mouthDelta > 0.12 || track.isPrimary;
 
-    track.speakingConfidence = isSpeaking ? Math.min(1.0, 0.6 + mouthDelta * 0.4) : 0.15;
+    // HARDENED: Kill automatic speaking assumption on isPrimary!
+    // Speaking requires BOTH optical mouth movement AND correlation with the audio RMS gate (or significant optical threshold).
+    const isSpeaking = mouthDelta > 0.14 && (this.audioMetrics ? (this.audioMetrics.outputRmsDbFS > -42 || this.audioMetrics.speechDetected) : mouthDelta > 0.18);
+
+    track.speakingConfidence = isSpeaking ? Math.min(1.0, 0.6 + mouthDelta * 0.4) : 0.10;
     if (track.speakingConfidence > 0.45) {
       track.speakingTicks++;
     }
@@ -1409,30 +1358,42 @@ export class PresenterVisionTracker {
 
     this.lastDetectedFaces = trackedPresenters;
 
+    const finalEyeContact = this.isPenaltySimulation 
+      ? Math.min(this.maxScoreCap, 38)
+      : eyeContactScore;
+    const finalPostureStability = this.isPenaltySimulation 
+      ? Math.min(this.maxScoreCap, 42)
+      : postureStability;
+    const finalGazeStatus: PresenterGazeStatus = this.isPenaltySimulation ? 'LOOKING_AWAY' : gazeStatus;
+    const finalPostureStatus: PresenterPostureStatus = this.isPenaltySimulation ? 'SLUMPED' : postureStatus;
+
     return {
-      faceDetected: true,
+      faceDetected: !this.isPenaltySimulation,
       faceBoundingBox: primaryBox,
-      gazeStatus,
-      eyeContactScore,
+      gazeStatus: finalGazeStatus,
+      eyeContactScore: finalEyeContact,
       headPose: {
         yaw: primaryYaw,
         pitch: primaryPitch,
         roll: primaryRoll,
         quaternion: { ...this.currentQuaternion }
       },
-      postureStatus,
-      postureStability,
-      gestureActivity,
+      postureStatus: finalPostureStatus,
+      postureStability: finalPostureStability,
+      gestureActivity: this.isPenaltySimulation ? 'LOW' : gestureActivity,
       slideNumber: this.currentSlideNumber,
       slideDwellTimeSeconds: elapsedSinceLastSlide,
       slideTransitionDetected,
-      lightingQuality: 'GOOD',
+      lightingQuality: this.isPenaltySimulation ? 'TOO_DARK' : 'GOOD',
       timestampMs: now,
-      presenterCount: trackedPresenters.length,
+      presenterCount: this.isPenaltySimulation ? 0 : trackedPresenters.length,
       activePresenterId: 1,
-      trackedPresenters,
+      trackedPresenters: this.isPenaltySimulation ? [] : trackedPresenters,
       speakingDistribution,
-      teamSpeakingBalanceScore
+      teamSpeakingBalanceScore: this.isPenaltySimulation ? 35 : teamSpeakingBalanceScore,
+      telemetryVerified: !this.isPenaltySimulation,
+      unverifiedHardwareFault: this.isPenaltySimulation,
+      visualDeliveryStatus: this.isPenaltySimulation ? 'UNVERIFIED_HARDWARE_FAULT' : 'VERIFIED'
     };
   }
 

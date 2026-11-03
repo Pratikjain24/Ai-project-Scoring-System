@@ -135,6 +135,9 @@ export interface LivePresenterTrackingMetrics {
   trackedPresenters?: TrackedPresenterFace[];
   speakingDistribution?: Record<number, number>; // Presenter ID -> Speaking percentage (0-100%)
   teamSpeakingBalanceScore?: number; // 0-100 normalized Shannon entropy score
+  telemetryVerified?: boolean;
+  unverifiedHardwareFault?: boolean;
+  visualDeliveryStatus?: 'VERIFIED' | 'INCOMPLETE' | 'UNVERIFIED_HARDWARE_FAULT';
 }
 
 export interface LiveEvent {

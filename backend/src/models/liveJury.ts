@@ -129,6 +129,9 @@ export interface LivePresenterTrackingMetrics {
   trackedPresenters?: TrackedPresenterFace[];
   speakingDistribution?: Record<number, number>;
   teamSpeakingBalanceScore?: number;
+  telemetryVerified?: boolean;
+  unverifiedHardwareFault?: boolean;
+  visualDeliveryStatus?: 'VERIFIED' | 'INCOMPLETE' | 'UNVERIFIED_HARDWARE_FAULT';
 }
 
 export type LiveClaimOccurrenceType = 
