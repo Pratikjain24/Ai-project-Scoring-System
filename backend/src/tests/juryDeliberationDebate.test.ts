@@ -281,4 +281,94 @@ describe('Phase 9/11: AI Jury Deliberation & Cross-Examination Debate Suite', ()
     assert.ok(delib, 'Deliberation record must be populated during orchestration');
     assert.strictEqual(delib.consensusScore, 83.7);
   });
+
+  test('10. Dynamic Claim-Graph Synthesis: constructs juror theses from claim graph and AST findings with zero hardcoded strings', async () => {
+    // 1. Verify default Smart Road Vision deliberation contains zero hardcoded 'TensorRT' or 'YOLOv8'
+    const defaultDelib = await JuryDeliberationAgent.deliberate(evalId);
+    const fullTranscript = defaultDelib.transcript;
+    assert.strictEqual(fullTranscript.includes('TensorRT'), false, 'Deliberation transcript must contain zero TensorRT mentions');
+    assert.strictEqual(fullTranscript.includes('YOLOv8'), false, 'Deliberation transcript must contain zero YOLOv8 mentions');
+
+    for (const round of defaultDelib.rounds) {
+      for (const pos of round.positions) {
+        assert.strictEqual(pos.thesis.includes('TensorRT'), false, `Position for ${pos.jurorName} must not contain TensorRT`);
+        assert.strictEqual(pos.thesis.includes('YOLOv8'), false, `Position for ${pos.jurorName} must not contain YOLOv8`);
+      }
+      if (round.critiques) {
+        for (const crit of round.critiques) {
+          assert.strictEqual(crit.argument.includes('TensorRT'), false, 'Critique argument must not contain TensorRT');
+          assert.strictEqual(crit.argument.includes('YOLOv8'), false, 'Critique argument must not contain YOLOv8');
+        }
+      }
+    }
+
+    // 2. Custom quantum project context with distinct claims & AST scorecard
+    const customContext = {
+      evaluationId: 'eval_quantum_opt_test',
+      projectName: 'Quantum Annealing Max-Cut Solver',
+      architectureType: 'HYBRID' as const,
+      claims: [
+        {
+          id: 'clm_q1',
+          claimText: 'Quantum annealing solver achieves 99.4% ground-state fidelity on Max-Cut instances.',
+          claimType: 'ACCURACY',
+          status: 'PARTIALLY_VERIFIED',
+          confidence: 88
+        },
+        {
+          id: 'clm_q2',
+          claimText: 'QPU processes 500-variable QUBO instances with 1.2ms latency SLA.',
+          claimType: 'SPEED',
+          status: 'VERIFIED',
+          confidence: 95
+        },
+        {
+          id: 'clm_q3',
+          claimText: 'Reduces cooling power consumption by 50% compared to classical cryogenic computing nodes.',
+          claimType: 'COST',
+          status: 'UNVERIFIED',
+          confidence: 45
+        }
+      ],
+      astScorecard: {
+        cyclomaticComplexity: 7,
+        maintainabilityIndex: 86,
+        godFunctions: [{ name: 'quboHamiltonianKernel', loc: 42 }]
+      },
+      originalityProfile: {
+        overallOriginalityScore: 68
+      }
+    };
+
+    // 3. Extract insights
+    const insights = JuryDeliberationAgent.extractClaimGraphInsights(customContext);
+    assert.strictEqual(insights.projectName, 'Quantum Annealing Max-Cut Solver');
+    assert.ok(insights.accuracyClaimBrief.includes('99.4%'), `Accuracy claim should capture 99.4%: ${insights.accuracyClaimBrief}`);
+    assert.ok(insights.perfClaimBrief.includes('1.2ms'), `Performance claim should capture 1.2ms: ${insights.perfClaimBrief}`);
+    assert.strictEqual(insights.cyclomaticComplexity, 7);
+    assert.strictEqual(insights.hotspotFunction, 'quboHamiltonianKernel');
+    assert.strictEqual(insights.noveltyPct, 68);
+
+    // 4. Test evaluateWithJurorModel fallback with custom context
+    const architectEval = await JuryDeliberationAgent.evaluateWithJurorModel(
+      'persona_architect',
+      'Analyze architectural complexity',
+      85.0,
+      customContext
+    );
+    assert.ok(architectEval.thesis.includes('quboHamiltonianKernel'), `Thesis should cite custom function: ${architectEval.thesis}`);
+    assert.ok(architectEval.thesis.includes('CC: 7'), `Thesis should cite custom cyclomatic complexity: ${architectEval.thesis}`);
+    assert.strictEqual(architectEval.thesis.includes('TensorRT'), false);
+    assert.strictEqual(architectEval.thesis.includes('YOLOv8'), false);
+
+    const academicEval = await JuryDeliberationAgent.evaluateWithJurorModel(
+      'persona_academic',
+      'Analyze research novelty',
+      85.0,
+      customContext
+    );
+    assert.ok(academicEval.thesis.includes('99.4%'), `Thesis should cite custom accuracy metric: ${academicEval.thesis}`);
+    assert.strictEqual(academicEval.thesis.includes('TensorRT'), false);
+    assert.strictEqual(academicEval.thesis.includes('YOLOv8'), false);
+  });
 });
