@@ -266,8 +266,13 @@ export class ApiService {
         );
       }
 
-      // Only notify backend offline if network failed (status 0) or explicit BACKEND_OFFLINE
-      const isNetworkOffline = apiError.status === 0 || apiError.code === 'BACKEND_OFFLINE';
+      // Notify backend offline if network failed (status 0), explicit BACKEND_OFFLINE, or reverse proxy 502/503/504
+      const isNetworkOffline =
+        apiError.status === 0 ||
+        apiError.code === 'BACKEND_OFFLINE' ||
+        apiError.status === 502 ||
+        apiError.status === 503 ||
+        apiError.status === 504;
       if (isNetworkOffline) {
         this.notifyStatusListeners(false, apiError);
       }

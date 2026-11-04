@@ -28,6 +28,7 @@ import type {
   RubricVersion,
 } from '../models/masterScoring';
 import { JuryRepository } from '../repositories/juryRepository';
+import { EvaluationRepository } from '../repositories/evaluationRepository';
 
 export interface UpstreamEvaluationContext {
   evaluationId: string;
@@ -63,7 +64,9 @@ export class MasterScoringEngine {
    * Builds the multi-modal context from all prior phases in SQLite
    */
   static loadContext(evaluationId: string, customRubricVersionId?: string): UpstreamEvaluationContext {
-    const evalRow = db.get<any>(`SELECT * FROM evaluations WHERE id = ?`, evaluationId);
+    const evaluation = EvaluationRepository.findById(evaluationId);
+    const targetEvalId = evaluation ? evaluation.id : evaluationId;
+    const evalRow = db.get<any>(`SELECT * FROM evaluations WHERE id = ?`, targetEvalId);
     if (!evalRow) {
       throw new Error(`Evaluation ${evaluationId} not found in database.`);
     }
@@ -75,7 +78,7 @@ export class MasterScoringEngine {
     if (customRubricVersionId) {
       rubricVersion = JuryRepository.getRubricVersion(customRubricVersionId);
     } else {
-      const existingDecision = JuryRepository.getJuryDecision(evaluationId);
+      const existingDecision = JuryRepository.getJuryDecision(targetEvalId);
       if (existingDecision?.rubricVersionId) {
         rubricVersion = JuryRepository.getRubricVersion(existingDecision.rubricVersionId);
       }
@@ -102,32 +105,32 @@ export class MasterScoringEngine {
     }
 
     // Ingest artifacts from all prior engines
-    const projectDna = db.get<any>(`SELECT * FROM project_dna WHERE evaluation_id = ?`, evaluationId);
-    const documents = db.all<any>(`SELECT * FROM documents WHERE evaluation_id = ?`, evaluationId);
-    const video = db.get<any>(`SELECT * FROM videos WHERE evaluation_id = ?`, evaluationId);
-    const presentation = db.get<any>(`SELECT * FROM presentation_analyses WHERE evaluation_id = ?`, evaluationId);
-    const demo = db.get<any>(`SELECT * FROM demo_analyses WHERE evaluation_id = ?`, evaluationId);
-    const researchFindings = db.all<any>(`SELECT * FROM research_findings WHERE evaluation_id = ?`, evaluationId);
-    const researchSources = db.all<any>(`SELECT * FROM research_sources WHERE evaluation_id = ?`, evaluationId);
-    const originalityProfile = db.get<any>(`SELECT * FROM originality_profiles WHERE evaluation_id = ?`, evaluationId);
+    const projectDna = db.get<any>(`SELECT * FROM project_dna WHERE evaluation_id = ?`, targetEvalId);
+    const documents = db.all<any>(`SELECT * FROM documents WHERE evaluation_id = ?`, targetEvalId);
+    const video = db.get<any>(`SELECT * FROM videos WHERE evaluation_id = ?`, targetEvalId);
+    const presentation = db.get<any>(`SELECT * FROM presentation_analyses WHERE evaluation_id = ?`, targetEvalId);
+    const demo = db.get<any>(`SELECT * FROM demo_analyses WHERE evaluation_id = ?`, targetEvalId);
+    const researchFindings = db.all<any>(`SELECT * FROM research_findings WHERE evaluation_id = ?`, targetEvalId);
+    const researchSources = db.all<any>(`SELECT * FROM research_sources WHERE evaluation_id = ?`, targetEvalId);
+    const originalityProfile = db.get<any>(`SELECT * FROM originality_profiles WHERE evaluation_id = ?`, targetEvalId);
     const dimensionAnalyses = originalityProfile
       ? db.all<any>(`SELECT * FROM dimension_analyses WHERE originality_profile_id = ?`, originalityProfile.id)
       : [];
-    const uniqueContributions = db.all<any>(`SELECT * FROM unique_contributions WHERE evaluation_id = ?`, evaluationId);
-    const claims = db.all<any>(`SELECT * FROM claims WHERE evaluation_id = ?`, evaluationId);
-    const claimVerifications = db.all<any>(`SELECT * FROM claim_verifications WHERE evaluation_id = ?`, evaluationId);
-    const claimContradictions = db.all<any>(`SELECT * FROM claim_contradictions WHERE evaluation_id = ?`, evaluationId);
-    const evaluatorAssessments = db.all<any>(`SELECT * FROM evaluator_assessments WHERE evaluation_id = ?`, evaluationId);
-    const evaluatorRisks = db.all<any>(`SELECT * FROM evaluator_risks WHERE evaluation_id = ?`, evaluationId);
-    const evaluatorEvidenceGaps = db.all<any>(`SELECT * FROM evaluator_evidence_gaps WHERE evaluation_id = ?`, evaluationId);
-    const evaluatorRecommendations = db.all<any>(`SELECT * FROM evaluator_recommendations WHERE evaluation_id = ?`, evaluationId);
-    const evaluatorMaturity = db.get<any>(`SELECT * FROM evaluator_maturity WHERE evaluation_id = ?`, evaluationId);
-    const evaluatorSummary = db.get<any>(`SELECT * FROM evaluator_summaries WHERE evaluation_id = ?`, evaluationId);
-    const evidenceItems = db.all<any>(`SELECT * FROM evidence WHERE evaluation_id = ?`, evaluationId);
-    const existingScores = db.all<any>(`SELECT * FROM scores WHERE evaluation_id = ?`, evaluationId);
+    const uniqueContributions = db.all<any>(`SELECT * FROM unique_contributions WHERE evaluation_id = ?`, targetEvalId);
+    const claims = db.all<any>(`SELECT * FROM claims WHERE evaluation_id = ?`, targetEvalId);
+    const claimVerifications = db.all<any>(`SELECT * FROM claim_verifications WHERE evaluation_id = ?`, targetEvalId);
+    const claimContradictions = db.all<any>(`SELECT * FROM claim_contradictions WHERE evaluation_id = ?`, targetEvalId);
+    const evaluatorAssessments = db.all<any>(`SELECT * FROM evaluator_assessments WHERE evaluation_id = ?`, targetEvalId);
+    const evaluatorRisks = db.all<any>(`SELECT * FROM evaluator_risks WHERE evaluation_id = ?`, targetEvalId);
+    const evaluatorEvidenceGaps = db.all<any>(`SELECT * FROM evaluator_evidence_gaps WHERE evaluation_id = ?`, targetEvalId);
+    const evaluatorRecommendations = db.all<any>(`SELECT * FROM evaluator_recommendations WHERE evaluation_id = ?`, targetEvalId);
+    const evaluatorMaturity = db.get<any>(`SELECT * FROM evaluator_maturity WHERE evaluation_id = ?`, targetEvalId);
+    const evaluatorSummary = db.get<any>(`SELECT * FROM evaluator_summaries WHERE evaluation_id = ?`, targetEvalId);
+    const evidenceItems = db.all<any>(`SELECT * FROM evidence WHERE evaluation_id = ?`, targetEvalId);
+    const existingScores = db.all<any>(`SELECT * FROM scores WHERE evaluation_id = ?`, targetEvalId);
 
     return {
-      evaluationId,
+      evaluationId: targetEvalId,
       projectId: projRow?.id || evalRow.project_id || 'eval_project',
       projectName: projRow?.name || evalRow.project_id || 'Project Evaluation',
       architectureType: projRow?.architecture_type === 'HARDWARE'

@@ -73,6 +73,10 @@ export const ApiAlertProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     const unsubscribeApi = api.subscribe((online, error) => {
       setIsBackendOnline(online);
+      if (online) {
+        // Automatically dismiss stale gateway/offline errors when backend reconnects
+        setAlerts((prev) => prev.filter((a) => a.code !== 'BACKEND_OFFLINE' && a.status !== 502 && a.status !== 503 && a.status !== 0));
+      }
       if (!online && error && (error.status === 0 || error.code === 'BACKEND_OFFLINE')) {
         addAlert({
           title: 'Backend Unreachable',

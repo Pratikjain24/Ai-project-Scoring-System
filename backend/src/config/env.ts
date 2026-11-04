@@ -21,10 +21,7 @@ const isTestEnv = process.env.NODE_ENV === 'test' || process.argv.some(a => a.in
 const nodeEnv = isTestEnv ? 'test' : (process.env.NODE_ENV || 'development');
 const jwtSecret = process.env.JWT_SECRET?.trim() || (nodeEnv === 'production' ? '' : DEV_FALLBACK_JWT_SECRET);
 
-const configuredDbPath = isTestEnv
-  ? (process.env.TEST_DATABASE_PATH || path.resolve(projectRoot, 'projectxray_test.db'))
-  : process.env.DATABASE_PATH;
-
+const configuredDbPath = process.env.DATABASE_PATH;
 const resolvedDbPath = configuredDbPath
   ? (path.isAbsolute(configuredDbPath)
       ? configuredDbPath

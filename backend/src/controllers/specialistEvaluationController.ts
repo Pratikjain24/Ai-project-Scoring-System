@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { db } from '../db/database';
+import { EvaluationRepository } from '../repositories/evaluationRepository';
 import { AssessmentAggregator } from '../specialist-evaluators/assessmentAggregator';
 import { SpecialistEvaluationRepository } from '../repositories/specialistEvaluationRepository';
 import { ClaimVerificationRepository } from '../repositories/claimVerificationRepository';
@@ -17,22 +18,24 @@ export class SpecialistEvaluationController {
    * runs the specialist evaluation pipeline.
    */
   static async buildContextAndAnalyze(evaluationId: string): Promise<any> {
-    const evalRow = db.get<any>(`SELECT * FROM evaluations WHERE id = ?`, evaluationId);
+    const evaluation = EvaluationRepository.findById(evaluationId);
+    const targetEvalId = evaluation ? evaluation.id : evaluationId;
+    const evalRow = db.get<any>(`SELECT * FROM evaluations WHERE id = ?`, targetEvalId);
     const projRow = evalRow
       ? db.get<any>(`SELECT * FROM projects WHERE id = ?`, evalRow.project_id)
       : null;
 
-    const evidenceItems = db.all<any>(`SELECT * FROM evidence WHERE evaluation_id = ?`, evaluationId);
-    const documents = DocumentRepository.findDocumentsByEvaluationId(evaluationId);
-    const videoBundle = MultimodalRepository.getEvaluationVideoAnalysis(evaluationId);
-    const claims = ClaimVerificationRepository.getClaimsByEvaluation(evaluationId);
-    const claimVerifications = ClaimVerificationRepository.getVerificationsByEvaluation(evaluationId);
-    const claimContradictions = ClaimVerificationRepository.getContradictionsByEvaluation(evaluationId);
-    const researchFindings = ResearchRepository.findFindingsByEvaluationId(evaluationId);
-    const researchSources = ResearchRepository.findSourcesByEvaluationId(evaluationId);
+    const evidenceItems = db.all<any>(`SELECT * FROM evidence WHERE evaluation_id = ?`, targetEvalId);
+    const documents = DocumentRepository.findDocumentsByEvaluationId(targetEvalId);
+    const videoBundle = MultimodalRepository.getEvaluationVideoAnalysis(targetEvalId);
+    const claims = ClaimVerificationRepository.getClaimsByEvaluation(targetEvalId);
+    const claimVerifications = ClaimVerificationRepository.getVerificationsByEvaluation(targetEvalId);
+    const claimContradictions = ClaimVerificationRepository.getContradictionsByEvaluation(targetEvalId);
+    const researchFindings = ResearchRepository.findFindingsByEvaluationId(targetEvalId);
+    const researchSources = ResearchRepository.findSourcesByEvaluationId(targetEvalId);
 
     const context: SpecialistEvaluationContext = {
-      evaluationId,
+      evaluationId: targetEvalId,
       projectId: projRow?.id || 'smart-road-vision',
       projectName: projRow?.name || 'Smart Road Vision',
       projectDescription: projRow?.problem_statement || '',

@@ -184,6 +184,19 @@ if (!isTestMode) {
     });
   });
 
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      logger.error(`Port ${ENV.PORT} is already in use by another process.`, {
+        module: 'Server',
+        port: ENV.PORT,
+        error: err.message,
+      });
+      process.exit(1);
+    } else {
+      logger.error('Server socket error', { module: 'Server', error: err?.message || String(err) });
+    }
+  });
+
   const shutdown = async () => {
     try {
       TelemetryBatchQueue.getInstance().stopWorker();

@@ -77,9 +77,13 @@ export const EvaluationWorkspacePage: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(!matchingMock);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastApiError, setLastApiError] = useState<any | null>(null);
-  const [evalId, setEvalId] = useState<string>(
-    id?.startsWith('eval_') ? id : (id === 'smart-road-vision' ? 'eval_smart-road-vision' : `eval_${id}`)
-  );
+  const [evalId, setEvalId] = useState<string>(() => {
+    if (!id) return '';
+    if (id.startsWith('eval_')) return id;
+    if (id === 'sentinelai-ai-powered-smart-surveillance-threat-detection-system') return 'eval_1793729086627_n70h';
+    if (id === 'smart-road-vision') return 'eval_smart-road-vision';
+    return `eval_${id}`;
+  });
 
   const { currentUser, isJudge } = useAuth();
   const [isCalibrationOpen, setIsCalibrationOpen] = useState<boolean>(false);
@@ -96,7 +100,12 @@ export const EvaluationWorkspacePage: React.FC = () => {
     try {
       // 1. Resolve Evaluation Record from API
       const evalData = await api.getEvaluationById(id);
-      const resolvedEvalId = evalData?.id || (id.startsWith('eval_') ? id : (id === 'smart-road-vision' ? 'eval_smart-road-vision' : `eval_${id}`));
+      const fallbackEvalId = id.startsWith('eval_')
+        ? id
+        : (id === 'sentinelai-ai-powered-smart-surveillance-threat-detection-system'
+            ? 'eval_1793729086627_n70h'
+            : (id === 'smart-road-vision' ? 'eval_smart-road-vision' : `eval_${id}`));
+      const resolvedEvalId = evalData?.id || fallbackEvalId;
       const resolvedProjectId = evalData?.projectId || (id.startsWith('eval_') ? id.replace(/^eval_/, '') : id);
 
       setEvalId(resolvedEvalId);

@@ -64,6 +64,11 @@ export interface TokenSubject {
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, '../../');
 
 // ----------------------------------------------------
 // Asymmetric RSA Key Management (RS256)
@@ -86,7 +91,9 @@ export function loadOrGenerateRsaKeys(): { privateKey: string; publicKey: string
 
   // Check if persisted on local disk (for dev server stability across restarts)
   const isTest = process.env.NODE_ENV === 'test' || process.argv.some(a => a.includes('--test') || a.includes('.test.ts'));
-  const keysFilePath = path.resolve(process.cwd(), 'backend', '.jwt_keys.json');
+  const keysFilePath = fs.existsSync(path.resolve(projectRoot, 'backend', '.jwt_keys.json'))
+    ? path.resolve(projectRoot, 'backend', '.jwt_keys.json')
+    : path.resolve(process.cwd(), 'backend', '.jwt_keys.json');
 
   if (!isTest) {
     try {

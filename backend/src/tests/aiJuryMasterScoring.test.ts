@@ -1,9 +1,10 @@
-import { test, describe } from 'node:test';
+import { test, describe, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { app } from '../server';
 import { MasterScoringEngine } from '../scoring/masterScoringEngine';
 import { JuryRepository } from '../repositories/juryRepository';
 import { signToken } from '../services/tokenService';
+import { seedDatabase } from '../db/seed';
 import {
   DEFAULT_WEIGHTS,
   DEFAULT_VERDICT_THRESHOLDS,
@@ -12,6 +13,10 @@ import {
 
 describe('Phase 9: AI Jury + Master Scoring Engine Test Suite', () => {
   const evalId = 'eval_smart-road-vision';
+
+  before(async () => {
+    await seedDatabase();
+  });
 
   test('1. Rubric Weights strictly sum to 100%', () => {
     const isValid = validateWeightsSum(DEFAULT_WEIGHTS);

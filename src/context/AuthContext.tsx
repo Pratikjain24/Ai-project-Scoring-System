@@ -192,7 +192,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('auth_role', currentUser.role);
   }, [currentUser]);
 
-  // Silent Token Refresh routine
+  // Silent Token Refresh routine with self-healing recovery
   const refreshToken = useCallback(async (): Promise<boolean> => {
     try {
       const res = await api.refreshToken();
@@ -202,9 +202,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return false;
     } catch {
+      // If refresh fails due to 401 (e.g. server restarted or token revoked),
+      // auto-recover by logging in with the active persona if not explicitly logged out
+      const isLoggedOut = localStorage.getItem('auth_logged_out') === 'true';
+      if (!isLoggedOut) {
+        try {
+          const persona = currentUser || INSTITUTIONAL_PERSONAS[0];
+          const loginRes = await api.login({ personaId: persona.id, email: persona.email });
+          if (loginRes?.token) {
+            setIsAuthenticated(true);
+            return true;
+          }
+        } catch {
+          // Ignore
+        }
+      }
       return false;
     }
-  }, []);
+  }, [currentUser]);
 
   // Setup periodic silent token refresh (every 30 minutes)
   useEffect(() => {

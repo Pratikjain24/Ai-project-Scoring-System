@@ -255,6 +255,17 @@ export async function seedDatabase(): Promise<void> {
       problemStatement: 'Standardized mass instruction fails to adapt to individual student knowledge gaps and cognitive fatigue in foundational high school mathematics.',
       solutionDescription: 'Web-based interactive tutoring platform using Bayesian Knowledge Tracing and webcam eye-tracking to dynamically modulate problem difficulty.',
       teamName: 'CognitivePath EdTech'
+    },
+    {
+      id: 'sentinelai-ai-powered-smart-surveillance-threat-detection-system',
+      name: 'SentinelAI – AI-Powered Smart Surveillance & Threat Detection System',
+      architectureType: 'HYBRID' as const,
+      category: 'Primary Category: Artificial Intelligence & Machine Learning (AI/ML)  Secondary Category: Internet of Things (IoT) & Embedded Systems',
+      domain: 'Smart Security & Surveillance, Public Safety & Smart City Infrastructure',
+      tagline: 'AI-Powered Smart Surveillance & Threat Detection System',
+      problemStatement: 'Traditional CCTV surveillance systems rely heavily on continuous human monitoring, making it difficult to identify suspicious activities, unauthorized access, and potential security threats in real time.',
+      solutionDescription: 'SentinelAI is an AI-powered smart surveillance and threat detection system that combines Artificial Intelligence, Computer Vision, IoT, and embedded hardware to provide intelligent, automated security monitoring with local Edge AI processing.',
+      teamName: 'SentinelAI Innovators – SHHJB Polytechnic, Chandwad.'
     }
   ];
 
@@ -271,13 +282,16 @@ export async function seedDatabase(): Promise<void> {
     'neuroflex-bci': { score: 85.0, confidence: 88, verdict: 'STRONG' },
     'quantumsafe-kms': { score: 82.6, confidence: 89, verdict: 'STRONG' },
     'eduadaptive-ai': { score: 64.5, confidence: 76, verdict: 'NEEDS_IMPROVEMENT' },
+    'sentinelai-ai-powered-smart-surveillance-threat-detection-system': { score: 80.2, confidence: 84, verdict: 'STRONG' },
   };
 
   for (const p of sampleProjects) {
     ProjectRepository.create(p);
 
     // Create Evaluation for each project
-    const evaluationId = `eval_${p.id}`;
+    const evaluationId = p.id === 'sentinelai-ai-powered-smart-surveillance-threat-detection-system'
+      ? 'eval_1793729086627_n70h'
+      : `eval_${p.id}`;
     const executionId = `exec_seed_${p.id}`;
     const pScore = scoreMap[p.id] || { score: 82.0, confidence: 85, verdict: 'STRONG' };
 
@@ -851,7 +865,10 @@ export async function seedDatabase(): Promise<void> {
   seedLogger.info('  📊 Seeding Phase 8 Technical + Impact + Feasibility Intelligence Engine artifacts...');
   const { SpecialistEvaluationController } = await import('../controllers/specialistEvaluationController');
   for (const p of sampleProjects) {
-    await SpecialistEvaluationController.buildContextAndAnalyze(`eval_${p.id}`);
+    const evalId = p.id === 'sentinelai-ai-powered-smart-surveillance-threat-detection-system'
+      ? 'eval_1793729086627_n70h'
+      : `eval_${p.id}`;
+    await SpecialistEvaluationController.buildContextAndAnalyze(evalId);
   }
 
   // --- Seed Phase 9: AI Jury + Master Scoring Engine ---
@@ -886,7 +903,9 @@ export async function seedDatabase(): Promise<void> {
 
   // 2. Compute and seed Master Evaluations for all sample projects
   for (const p of sampleProjects) {
-    const evalId = `eval_${p.id}`;
+    const evalId = p.id === 'sentinelai-ai-powered-smart-surveillance-threat-detection-system'
+      ? 'eval_1793729086627_n70h'
+      : `eval_${p.id}`;
     const context = MasterScoringEngine.loadContext(evalId, 'rubric_v1_canonical');
     const decision = MasterScoringEngine.calculateMasterEvaluation(context);
     JuryRepository.saveJuryDecision(decision);
@@ -1063,6 +1082,18 @@ export async function seedDatabase(): Promise<void> {
     revokedAt: null,
     createdAt: new Date().toISOString(),
   });
+
+  // Seed SentinelAI Intelligence Report
+  try {
+    const sentinelReport = ReportEngine.generate('eval_1793729086627_n70h', 1);
+    sentinelReport.overallScore = 80.2;
+    sentinelReport.overallVerdict = 'STRONG';
+    sentinelReport.overallConfidence = 84;
+    ReportRepository.saveReport(sentinelReport);
+    seedLogger.info('  📑 Successfully seeded SentinelAI intelligence report.');
+  } catch (err: any) {
+    seedLogger.warn(`  ⚠️ Could not seed SentinelAI report: ${err?.message}`);
+  }
 
   // =========================================================================
   // PHASE 11: LIVE CAMERA AI JURY SEEDING
