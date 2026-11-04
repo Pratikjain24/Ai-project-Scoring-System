@@ -13,14 +13,16 @@ import type { LiveCameraSource } from '../../types/liveJury';
 interface LiveSetupScreenProps {
   evaluationId?: string;
   projectName: string;
+  project?: any;
   onEnterRoom: (source: LiveCameraSource, micId: string) => void;
 }
 
 export const LiveSetupScreen: React.FC<LiveSetupScreenProps> = ({
   projectName,
+  project,
   onEnterRoom,
 }) => {
-  const [selectedSource, setSelectedSource] = useState<LiveCameraSource>('SIMULATED');
+  const [selectedSource, setSelectedSource] = useState<LiveCameraSource>('WEBCAM');
   const [selectedMic, setSelectedMic] = useState<string>('default');
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [hasMicPermission, setHasMicPermission] = useState<boolean | null>(null);
@@ -141,10 +143,10 @@ export const LiveSetupScreen: React.FC<LiveSetupScreenProps> = ({
                   </div>
                   
                   <div className="text-sm font-semibold text-white">
-                    Smart Road Vision Demonstration Feed
+                    {projectName} Demonstration Feed
                   </div>
                   <div className="text-xs text-slate-400 mt-1 max-w-sm">
-                    Pre-configured edge telemetry simulation: Jetson Orin Nano TensorRT pipeline with live asphalt pothole tagging.
+                    {project?.solutionDescription || project?.problemStatement || 'Real-time telemetry and presentation stream with live claim verification.'}
                   </div>
                   <div className="mt-4 flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
                     <CheckCircle2 className="w-3.5 h-3.5" />

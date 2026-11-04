@@ -17,7 +17,10 @@ import {
   LogOut,
   Monitor,
   Camera,
-  Tv
+  Tv,
+  Info,
+  FileText,
+  X
 } from 'lucide-react';
 import type { 
   LiveJurySession, 
@@ -41,6 +44,7 @@ import { LiveFinalizationModal } from './LiveFinalizationModal';
 interface LiveCameraRoomProps {
   evaluationId: string;
   projectName: string;
+  project?: any;
   cameraSource: LiveCameraSource;
   onViewReport: () => void;
   onLeaveRoom: () => void;
@@ -49,6 +53,7 @@ interface LiveCameraRoomProps {
 export const LiveCameraRoom: React.FC<LiveCameraRoomProps> = ({
   evaluationId,
   projectName,
+  project,
   cameraSource,
   onViewReport,
   onLeaveRoom,
@@ -60,6 +65,7 @@ export const LiveCameraRoom: React.FC<LiveCameraRoomProps> = ({
   const [layoutMode, setLayoutMode] = useState<'CAMERA' | 'SCREEN' | 'SPLIT'>('SPLIT');
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isVideoOff, setIsVideoOff] = useState<boolean>(false);
+  const [showProjectBrief, setShowProjectBrief] = useState<boolean>(false);
 
   // Time tracking
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
@@ -350,9 +356,17 @@ export const LiveCameraRoom: React.FC<LiveCameraRoomProps> = ({
 
           <div className="hidden md:flex items-center gap-2 pl-3 border-l border-slate-800">
             <span className="text-xs font-bold text-white">{projectName}</span>
-            <span className="text-[11px] px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 font-mono border border-cyan-500/20">
-              ORIN NANO EDGE HUD
+            <span className="text-[11px] px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 font-mono border border-cyan-500/20 uppercase">
+              {project?.architectureType || project?.type || 'AI CV'}
             </span>
+            <button
+              onClick={() => setShowProjectBrief(prev => !prev)}
+              className="px-2 py-0.5 rounded text-[11px] font-mono bg-white/5 hover:bg-white/10 text-cyan-300 border border-cyan-500/30 flex items-center gap-1 transition"
+              title="View full project details & problem statement"
+            >
+              <Info className="w-3 h-3" />
+              <span>Project DNA</span>
+            </button>
           </div>
         </div>
 
@@ -791,6 +805,63 @@ export const LiveCameraRoom: React.FC<LiveCameraRoomProps> = ({
             setIsFinalizing(false);
           }}
         />
+      )}
+
+      {/* 5. Live Project DNA Context Modal */}
+      {showProjectBrief && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-cyan-400" />
+                <h3 className="font-bold text-sm text-white">Live Project Context (Under Evaluation)</h3>
+              </div>
+              <button
+                onClick={() => setShowProjectBrief(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-3.5 text-xs">
+              <div>
+                <span className="text-slate-500 uppercase font-mono text-[10px] block">Project Title & Team</span>
+                <span className="font-bold text-slate-100 text-sm">{project?.name || projectName}</span>
+                <span className="text-slate-400 ml-2 font-mono">({project?.teamName || project?.team || 'Core Team'})</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5 p-3 rounded-xl bg-slate-950 border border-slate-800/80 font-mono">
+                <div>
+                  <span className="text-slate-500 text-[10px] block uppercase">Domain</span>
+                  <span className="text-cyan-300 font-semibold">{project?.domain || 'General Technology'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 text-[10px] block uppercase">Architecture</span>
+                  <span className="text-emerald-300 font-semibold">{project?.architectureType || project?.type || 'HYBRID'}</span>
+                </div>
+              </div>
+              <div>
+                <span className="text-slate-500 uppercase font-mono text-[10px] block mb-1">Problem Statement</span>
+                <p className="text-slate-300 leading-relaxed bg-slate-950/70 p-3 rounded-xl border border-slate-800/80 font-mono text-[11px]">
+                  {project?.problemStatement || 'Targeting verified real-world technological challenges with automated forensic validation.'}
+                </p>
+              </div>
+              <div>
+                <span className="text-slate-500 uppercase font-mono text-[10px] block mb-1">Solution Description</span>
+                <p className="text-slate-300 leading-relaxed bg-slate-950/70 p-3 rounded-xl border border-slate-800/80 font-mono text-[11px]">
+                  {project?.solutionDescription || 'Autonomous multimodal computer vision, acoustic forensics, and claim verification pipeline.'}
+                </p>
+              </div>
+            </div>
+            <div className="pt-2 flex justify-end">
+              <button
+                onClick={() => setShowProjectBrief(false)}
+                className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition font-mono"
+              >
+                Return to Live Chamber
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

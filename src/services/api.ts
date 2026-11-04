@@ -652,8 +652,12 @@ export class ApiService {
     evaluationId?: string;
     fileName: string;
     fileReference?: string;
+    fileBase64?: string;
+    mediaSourceType?: string;
+    format?: string;
     durationSeconds?: number;
     fps?: number;
+    resolution?: string;
   }): Promise<any> {
     return this.request<any>('/videos', {
       method: 'POST',

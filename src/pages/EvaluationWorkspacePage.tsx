@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   Sparkles,
@@ -263,10 +263,30 @@ export const EvaluationWorkspacePage: React.FC = () => {
     setTimeout(() => setNotificationMessage(null), 4000);
   };
 
-  const [liveRoomState, setLiveRoomState] = useState<'SETUP' | 'ROOM' | 'SUMMARY'>('SETUP');
-  const [liveCameraSource, setLiveCameraSource] = useState<LiveCameraSource>('SIMULATED');
+  const queryParams = new URLSearchParams(location.search);
+  const isAutoStartLive = queryParams.get('autoStart') === 'true' || (location.state as any)?.autoStartLive;
+  const requestedCameraSource = (queryParams.get('camera') as LiveCameraSource) || (location.state as any)?.cameraSource;
+
+  const [liveRoomState, setLiveRoomState] = useState<'SETUP' | 'ROOM' | 'SUMMARY'>(() => {
+    return isAutoStartLive ? 'ROOM' : 'SETUP';
+  });
+  const [liveCameraSource, setLiveCameraSource] = useState<LiveCameraSource>(() => {
+    return requestedCameraSource || 'WEBCAM';
+  });
   const [liveSessionData, setLiveSessionData] = useState<LiveJurySession | null>(null);
   const [liveSnapshotData, setLiveSnapshotData] = useState<LiveScoreSnapshot | null>(null);
+
+  const [prevSearch, setPrevSearch] = useState(location.search);
+  if (prevSearch !== location.search) {
+    setPrevSearch(location.search);
+    const qp = new URLSearchParams(location.search);
+    if (qp.get('autoStart') === 'true' || (location.state as any)?.autoStartLive) {
+      setLiveRoomState('ROOM');
+      if (qp.get('camera') === 'WEBCAM' || (location.state as any)?.cameraSource === 'WEBCAM') {
+        setLiveCameraSource('WEBCAM');
+      }
+    }
+  }
 
   // Phase 12: Orchestrator & Review Drawer States
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
@@ -1091,7 +1111,8 @@ export const EvaluationWorkspacePage: React.FC = () => {
             {liveRoomState === 'SETUP' && (
               <LiveSetupScreen
                 evaluationId={evalId}
-                projectName={project.name}
+                projectName={project?.name || 'Project Evaluation'}
+                project={project}
                 onEnterRoom={(src) => {
                   setLiveCameraSource(src);
                   setLiveRoomState('ROOM');
@@ -1102,9 +1123,10 @@ export const EvaluationWorkspacePage: React.FC = () => {
             {liveRoomState === 'ROOM' && (
               <LiveCameraRoom
                 evaluationId={evalId}
-                projectName={project.name}
+                projectName={project?.name || 'Project Evaluation'}
+                project={project}
                 cameraSource={liveCameraSource}
-                onViewReport={() => navigate(`/evaluations/${project.id}/report`)}
+                onViewReport={() => navigate(`/evaluations/${project?.id || id}/report`)}
                 onLeaveRoom={() => setLiveRoomState('SETUP')}
               />
             )}

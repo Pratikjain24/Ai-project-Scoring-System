@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Sparkles,
@@ -14,6 +14,12 @@ import {
   Activity,
   ShieldCheck,
   Zap,
+  UploadCloud,
+  Film,
+  Play,
+  X,
+  AlertCircle,
+  Radio,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -58,6 +64,76 @@ export const NewEvaluationPage: React.FC = () => {
 
   const [evalMode, setEvalMode] = useState<'live-camera' | 'video-analysis'>('video-analysis');
   const [isEvaluating, setIsEvaluating] = useState(false);
+
+  // Real Video Upload State for Video Analysis Modality
+  const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
+  const [videoBase64, setVideoBase64] = useState<string | null>(null);
+  const [videoMeta, setVideoMeta] = useState<{ name: string; size: string; type: string } | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+
+  const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setVideoError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('video/') && !file.name.match(/\.(mp4|mov|webm|mkv|avi)$/i)) {
+      setVideoError('Please upload a valid video file (.mp4, .webm, .mov, or .mkv).');
+      return;
+    }
+
+    setSelectedVideoFile(file);
+    const previewUrl = URL.createObjectURL(file);
+    setVideoPreviewUrl(previewUrl);
+
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
+    setVideoMeta({
+      name: file.name,
+      size: sizeMb,
+      type: file.type || 'video/mp4',
+    });
+
+    // Update staged files in Step 2 / Step 4
+    setFiles((prev) => {
+      const filtered = prev.filter((f) => f.type !== 'video' && f.id !== 'uploaded-video-main');
+      return [
+        {
+          id: 'uploaded-video-main',
+          name: file.name,
+          size: sizeMb,
+          type: 'video',
+          progress: 100,
+        },
+        ...filtered,
+      ];
+    });
+
+    // If file is under 30MB, read as base64 for direct API payload
+    if (file.size <= 30 * 1024 * 1024) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setVideoBase64(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveVideo = () => {
+    if (videoPreviewUrl) {
+      URL.revokeObjectURL(videoPreviewUrl);
+    }
+    setSelectedVideoFile(null);
+    setVideoPreviewUrl(null);
+    setVideoBase64(null);
+    setVideoMeta(null);
+    setVideoError(null);
+    if (videoInputRef.current) {
+      videoInputRef.current.value = '';
+    }
+  };
 
   const steps: Step[] = [
     { id: 1, name: 'Project Info', description: 'Core details & scope' },
@@ -149,7 +225,59 @@ export const NewEvaluationPage: React.FC = () => {
     ]);
   };
 
+  const handleStartLiveEvaluation = async () => {
+    setIsEvaluating(true);
+    try {
+      const baseSlug = formData.projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `new-proj-${Date.now()}`;
+      const slug = baseSlug;
+
+      const createdProj = await api.createProject({
+        id: slug,
+        name: formData.projectName,
+        architectureType: formData.projectType.toUpperCase(),
+        category: formData.category,
+        domain: formData.domain,
+        problemStatement: formData.problemStatement,
+        solutionDescription: formData.projectDescription,
+        teamName: formData.teamName,
+      }).catch(() => ({ id: slug }));
+
+      const projectId = createdProj?.id || slug;
+      const createdEval = await api.createEvaluation({
+        projectId,
+        mode: 'LIVE_CAMERA',
+      }).catch(() => ({ id: `eval_${projectId}` }));
+
+      const evalId = createdEval?.id || `eval_${projectId}`;
+
+      // Start live session in backend with hardware camera mode
+      try {
+        await api.startLiveSession(evalId, 'WEBCAM', { cvConfidenceThreshold: 0.85 });
+      } catch (liveErr) {
+        console.warn('[NewEvaluationPage] Live session pre-start warning:', liveErr);
+      }
+
+      // Directly redirect to live camera detection room with real project context
+      navigate(`/evaluations/${projectId}/live?camera=WEBCAM&autoStart=true`, {
+        state: { autoStartLive: true, cameraSource: 'WEBCAM' },
+      });
+    } catch (err: any) {
+      console.error('[NewEvaluationPage] Failed to initialize live evaluation:', err);
+      const fallbackSlug = formData.projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'smart-road-vision';
+      navigate(`/evaluations/${fallbackSlug}/live?camera=WEBCAM&autoStart=true`, {
+        state: { autoStartLive: true, cameraSource: 'WEBCAM' },
+      });
+    } finally {
+      setIsEvaluating(false);
+    }
+  };
+
   const handleStartEvaluation = async () => {
+    if (evalMode === 'live-camera') {
+      await handleStartLiveEvaluation();
+      return;
+    }
+
     setIsEvaluating(true);
     try {
       const baseSlug = formData.projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `new-proj-${Date.now()}`;
@@ -168,10 +296,27 @@ export const NewEvaluationPage: React.FC = () => {
       const projectId = createdProj?.id || slug;
       const createdEval = await api.createEvaluation({
         projectId,
-        mode: evalMode === 'live-camera' ? 'LIVE_CAMERA' : 'VIDEO_ANALYSIS',
+        mode: 'VIDEO_ANALYSIS',
       }).catch(() => ({ id: `eval_${projectId}` }));
 
       const evalId = createdEval?.id || `eval_${projectId}`;
+
+      // If a real video file was uploaded, register it with the backend multimodal engine
+      if (selectedVideoFile) {
+        try {
+          await api.uploadVideo({
+            projectId,
+            evaluationId: evalId,
+            fileName: selectedVideoFile.name,
+            fileBase64: videoBase64 || undefined,
+            mediaSourceType: 'UPLOADED_VIDEO',
+            format: selectedVideoFile.name.endsWith('.mov') ? 'MOV' : (selectedVideoFile.name.endsWith('.webm') ? 'WEBM' : 'MP4'),
+          });
+        } catch (uploadErr) {
+          console.warn('[NewEvaluationPage] Video upload warning:', uploadErr);
+        }
+      }
+
       await api.startEvaluation(evalId, { fastMode: true, stageDelayMs: 1400 }).catch(() => {});
 
       // Switch to real-time animated streaming progress UI
@@ -467,7 +612,7 @@ export const NewEvaluationPage: React.FC = () => {
           <Card className="p-6 sm:p-8 space-y-6 border-slate-800">
             <div>
               <h3 className="text-base font-bold text-slate-100 dark:text-slate-100 light:text-slate-900">
-                Step 3: Choose Evaluation Modality
+                Step 3: Choose Evaluation Modality & Staged Media
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
                 Select whether ProjectX-Ray will judge a live camera presentation stream or an uploaded recording.
@@ -545,6 +690,185 @@ export const NewEvaluationPage: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* DYNAMIC MODALITY CONTROL PANEL */}
+            {evalMode === 'video-analysis' && (
+              <div className="p-5 rounded-2xl bg-slate-950 border border-indigo-500/30 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Film className="w-5 h-5 text-indigo-400" />
+                    <h4 className="text-sm font-bold text-white">Video File Intake & Demo Recording</h4>
+                  </div>
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                    MP4 / WebM / MOV supported
+                  </span>
+                </div>
+
+                <input
+                  type="file"
+                  ref={videoInputRef}
+                  accept="video/mp4,video/webm,video/quicktime,video/x-matroska,video/*"
+                  onChange={handleVideoFileChange}
+                  className="hidden"
+                />
+
+                {!selectedVideoFile ? (
+                  <div
+                    onClick={() => videoInputRef.current?.click()}
+                    className="p-8 border-2 border-dashed border-slate-800 hover:border-indigo-500/60 rounded-xl cursor-pointer bg-slate-900/30 hover:bg-slate-900/60 transition flex flex-col items-center justify-center text-center space-y-2 group"
+                  >
+                    <div className="w-12 h-12 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 group-hover:scale-110 transition">
+                      <UploadCloud className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-200 group-hover:text-indigo-300 transition">
+                        Click to select and upload your project video file
+                      </span>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Drop video demonstration or presentation recording (.mp4, .webm, .mov)
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-500">
+                      Real multimodal frame extraction • Librosa pitch tracking • Visual latency HUD detection
+                    </span>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {/* Video Player Preview */}
+                    {videoPreviewUrl && (
+                      <div className="relative rounded-xl overflow-hidden bg-black border border-slate-800 aspect-video max-h-56 flex items-center justify-center">
+                        <video
+                          src={videoPreviewUrl}
+                          controls
+                          playsInline
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/90 border border-indigo-500/30 text-xs">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0">
+                          <Film className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-white truncate max-w-xs sm:max-w-md">
+                            {videoMeta?.name}
+                          </div>
+                          <div className="text-[11px] font-mono text-slate-400 flex items-center gap-2">
+                            <span>{videoMeta?.size}</span>
+                            <span>•</span>
+                            <span className="text-emerald-400 font-semibold">Video Staged for Analysis</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => videoInputRef.current?.click()}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-mono transition"
+                        >
+                          Change
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleRemoveVideo}
+                          className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition"
+                          title="Remove video"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[11px] text-slate-400 font-mono">
+                        Ready to process presentation & telemetry benchmarks.
+                      </span>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        onClick={handleStartEvaluation}
+                        isLoading={isEvaluating}
+                        className="text-xs flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 shadow-md shadow-indigo-600/20"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Run Video Analysis Pipeline</span>
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {videoError && (
+                  <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{videoError}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {evalMode === 'live-camera' && (
+              <div className="p-5 rounded-2xl bg-slate-950 border border-cyan-500/30 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Radio className="w-5 h-5 text-cyan-400 animate-pulse" />
+                    <h4 className="text-sm font-bold text-white">Live Camera Presentation Chamber</h4>
+                  </div>
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                    Real-Time Hardware Stream
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 text-xs space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shrink-0 mt-0.5">
+                      <Camera className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-white">
+                        Live Camera Detection & Presentation Forensics
+                      </div>
+                      <p className="text-slate-300 text-[11px] mt-0.5 leading-relaxed">
+                        Evaluates live video from your webcam in real-time. Features include MediaPipe face mesh, gaze stability, posture analysis, and live speech cadence tracking bound to your registered project data.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-slate-950/80 border border-slate-800/80 font-mono text-[11px] space-y-1">
+                    <div className="text-slate-400">
+                      <span className="text-slate-500 uppercase">Project Title:</span> <span className="text-white font-semibold">{formData.projectName}</span>
+                    </div>
+                    <div className="text-slate-400">
+                      <span className="text-slate-500 uppercase">Domain:</span> <span className="text-cyan-300">{formData.domain}</span>
+                    </div>
+                    <div className="text-slate-400 truncate">
+                      <span className="text-slate-500 uppercase">Problem:</span> <span className="text-slate-300">{formData.problemStatement}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[11px] text-cyan-400/80 font-mono flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+                    Bypasses setup screen — directly opens live room with camera active
+                  </span>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    onClick={handleStartLiveEvaluation}
+                    isLoading={isEvaluating}
+                    className="text-xs flex items-center gap-1.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold shadow-lg shadow-cyan-500/25"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Launch Live Camera Room Now</span>
+                  </Button>
+                </div>
+              </div>
+            )}
           </Card>
         )}
 
