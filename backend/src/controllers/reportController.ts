@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { ReportEngine } from '../report/reportEngine';
 import { ReportRepository } from '../repositories/reportRepository';
 import { PdfGenerator } from '../report/pdfGenerator';
+import { RealPdfGenerator } from '../report/realPdfGenerator';
 import { DocxGenerator } from '../report/docxGenerator';
 import type { ReportShare } from '../models/report';
 
@@ -160,6 +161,7 @@ export class ReportController {
     const versionParam = req.query.version as string | undefined;
     const version = versionParam ? parseInt(versionParam, 10) : undefined;
     const isDownload = req.query.download === 'true';
+    const format = req.query.format as string | undefined;
 
     try {
       let report = ReportRepository.getReport(evaluationId, version);
@@ -168,15 +170,26 @@ export class ReportController {
         ReportRepository.saveReport(report);
       }
 
-      const htmlContent = PdfGenerator.generatePrintableHtml(report);
-
-      const dispositionType = isDownload ? 'attachment' : 'inline';
       const safeProjectName = (report.projectName || 'Evaluation_Report').replace(/[^a-zA-Z0-9_-]+/g, '_');
 
+      // Binary PDF file download
+      if (isDownload || format === 'pdf') {
+        const pdfBuffer = await RealPdfGenerator.generate(report);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="ProjectXRay_Report_${safeProjectName}_v${report.version || 1}.pdf"`
+        );
+        res.send(pdfBuffer);
+        return;
+      }
+
+      // Publication printable HTML preview
+      const htmlContent = PdfGenerator.generatePrintableHtml(report);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader(
         'Content-Disposition',
-        `${dispositionType}; filename="ProjectXRay_Report_${safeProjectName}_v${report.version || 1}.html"`
+        `inline; filename="ProjectXRay_Report_${safeProjectName}_v${report.version || 1}.html"`
       );
       res.send(htmlContent);
     } catch (err: any) {

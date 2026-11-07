@@ -212,6 +212,22 @@ test('Phase 10: Final Intelligence Report + Evidence Explorer Test Suite', async
       assert.ok(htmlText.includes('<!DOCTYPE html>'));
       assert.ok(htmlText.includes('Smart Road Vision'));
 
+      // GET binary PDF attachment (download=true)
+      const binaryPdfRes = await fetch(`${baseUrl}/api/evaluations/${evalId}/report/pdf?download=true`, { headers: authHeaders });
+      assert.equal(binaryPdfRes.status, 200);
+      assert.equal(binaryPdfRes.headers.get('content-type'), 'application/pdf');
+      const pdfBuffer = await binaryPdfRes.arrayBuffer();
+      assert.ok(pdfBuffer.byteLength > 1000);
+      const pdfHeader = Buffer.from(pdfBuffer).subarray(0, 5).toString('ascii');
+      assert.equal(pdfHeader, '%PDF-');
+
+      // GET binary DOCX attachment
+      const docxRes = await fetch(`${baseUrl}/api/evaluations/${evalId}/report/docx`, { headers: authHeaders });
+      assert.equal(docxRes.status, 200);
+      assert.ok(docxRes.headers.get('content-type')?.includes('wordprocessingml'));
+      const docxBuffer = await docxRes.arrayBuffer();
+      assert.ok(docxBuffer.byteLength > 1000);
+
       // POST create share
       const shareRes = await fetch(`${baseUrl}/api/evaluations/${evalId}/report/share`, {
         method: 'POST',
