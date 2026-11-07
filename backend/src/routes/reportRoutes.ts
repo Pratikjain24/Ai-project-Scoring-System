@@ -12,6 +12,7 @@ reportRouter.get('/compare', ReportController.compareReportVersions);
 reportRouter.get('/evidence', ReportController.getReportEvidence);
 reportRouter.get('/sources', ReportController.getReportSources);
 reportRouter.get('/pdf', ReportController.getPdf);
+reportRouter.get('/docx', ReportController.getDocx);
 reportRouter.post('/share', ReportController.createShare);
 
 // Global share router: /api/report-share/*

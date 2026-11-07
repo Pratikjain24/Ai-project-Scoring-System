@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { ReportEngine } from '../report/reportEngine';
 import { ReportRepository } from '../repositories/reportRepository';
 import { PdfGenerator } from '../report/pdfGenerator';
+import { DocxGenerator } from '../report/docxGenerator';
 import type { ReportShare } from '../models/report';
 
 export class ReportController {
@@ -184,6 +185,41 @@ export class ReportController {
         error: {
           code: 'REPORT_EXPORT_FAILED',
           message: err.message || `Failed to export dossier for evaluation ${evaluationId}`,
+        },
+      });
+    }
+  }
+
+  /**
+   * GET /api/evaluations/:id/report/docx
+   */
+  static async getDocx(req: Request, res: Response): Promise<void> {
+    const evaluationId = req.params.id as string;
+    const versionParam = req.query.version as string | undefined;
+    const version = versionParam ? parseInt(versionParam, 10) : undefined;
+
+    try {
+      let report = ReportRepository.getReport(evaluationId, version);
+      if (!report) {
+        report = ReportEngine.generate(evaluationId, version || 3);
+        ReportRepository.saveReport(report);
+      }
+
+      const docxBuffer = await DocxGenerator.generate(report);
+      const safeProjectName = (report.projectName || 'Evaluation_Report').replace(/[^a-zA-Z0-9_-]+/g, '_');
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="ProjectXRay_Report_${safeProjectName}_v${report.version || 1}.docx"`
+      );
+      res.send(docxBuffer);
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: {
+          code: 'DOCX_EXPORT_FAILED',
+          message: err.message || `Failed to export Word document for evaluation ${evaluationId}`,
         },
       });
     }

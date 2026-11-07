@@ -11,7 +11,8 @@ import type { EvaluationReport } from '../../types/report';
 
 interface ReportHeaderBannerProps {
   report: EvaluationReport;
-  onDownloadPdf: () => void;
+  onDownloadPdf?: () => void;
+  onExport?: () => void;
   onPrint: () => void;
   onShare: () => void;
   onRegenerate: () => void;
@@ -21,6 +22,7 @@ interface ReportHeaderBannerProps {
 export const ReportHeaderBanner: React.FC<ReportHeaderBannerProps> = ({
   report,
   onDownloadPdf,
+  onExport,
   onPrint,
   onShare,
   onRegenerate,
@@ -126,17 +128,17 @@ export const ReportHeaderBanner: React.FC<ReportHeaderBannerProps> = ({
           <div className="flex flex-col gap-2 shrink-0 w-full sm:w-auto">
             <div className="flex items-center gap-2">
               <button
-                onClick={onDownloadPdf}
-                className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs font-mono flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-cyan-500/20"
-                title="Download publication-grade HTML/PDF report"
+                onClick={onExport || onDownloadPdf}
+                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs font-mono flex items-center justify-center gap-2 transition-all shadow-lg shadow-cyan-500/20"
+                title="Export evaluation dossier in PDF or Word (.DOCX) formats"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>Download Report</span>
+                <span>Export Dossier (PDF / DOCX)</span>
               </button>
 
               <button
                 onClick={onPrint}
-                className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 text-xs font-mono flex items-center justify-center gap-1.5 transition-all"
+                className="px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 text-xs font-mono flex items-center justify-center gap-1.5 transition-all"
                 title="Open browser print dialog"
               >
                 <Printer className="w-3.5 h-3.5" />
@@ -145,7 +147,7 @@ export const ReportHeaderBanner: React.FC<ReportHeaderBannerProps> = ({
 
               <button
                 onClick={onShare}
-                className="px-3 py-2 rounded-xl bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-300 text-xs font-mono flex items-center justify-center gap-1.5 transition-all"
+                className="px-3 py-2.5 rounded-xl bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-300 text-xs font-mono flex items-center justify-center gap-1.5 transition-all"
                 title="Generate secure shareable view-only link"
               >
                 <Share2 className="w-3.5 h-3.5" />

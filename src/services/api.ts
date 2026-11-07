@@ -1027,6 +1027,16 @@ export class ApiService {
     return `${API_BASE}/evaluations/${encodeURIComponent(evaluationId)}/report/pdf${qs ? `?${qs}` : ''}`;
   }
 
+  getReportDocxUrl(evaluationId: string, version?: number): string {
+    const token = this.getAuthToken();
+    const params = new URLSearchParams();
+    if (version) params.append('version', String(version));
+    params.append('download', 'true');
+    if (token) params.append('token', token);
+    const qs = params.toString();
+    return `${API_BASE}/evaluations/${encodeURIComponent(evaluationId)}/report/docx${qs ? `?${qs}` : ''}`;
+  }
+
   async createReportShare(evaluationId: string, expiresInDays: number = 30): Promise<any> {
     return this.request<any>(`/evaluations/${evaluationId}/report/share`, {
       method: 'POST',
@@ -1240,12 +1250,14 @@ export class ApiService {
 
   async finalizeEvaluation(
     evaluationId: string,
-    reviewerId?: string,
-    note?: string
-  ): Promise<{ message: string; state: any }> {
-    return this.request<{ message: string; state: any }>(`/evaluations/${evaluationId}/finalize`, {
+    reviewerOrNote?: string,
+    optionalNote?: string
+  ): Promise<{ message: string; state: any; data?: any }> {
+    const reviewerId = optionalNote ? reviewerOrNote : undefined;
+    const note = optionalNote || reviewerOrNote;
+    return this.request<{ message: string; state: any; data?: any }>(`/evaluations/${encodeURIComponent(evaluationId)}/finalize`, {
       method: 'POST',
-      body: JSON.stringify({ reviewerId, note }),
+      body: JSON.stringify({ reviewerId, note, reviewerNotes: note }),
     });
   }
 

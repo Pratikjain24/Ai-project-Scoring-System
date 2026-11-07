@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   Sparkles,
@@ -62,6 +62,7 @@ import { ScoreCalibrationModal } from '../components/ai-jury/ScoreCalibrationMod
 import { AuditTrailDrawer } from '../components/pipeline/AuditTrailDrawer';
 import { EvidenceChecklistModule } from '../components/evidence/EvidenceChecklistModule';
 import { EvaluationStreamView } from '../components/pipeline/EvaluationStreamView';
+import { ExportDossierModal } from '../components/report/ExportDossierModal';
 import type { LiveCameraSource, LiveJurySession, LiveScoreSnapshot } from '../types/liveJury';
 import type { OrchestratorProgress } from '../types/integration';
 
@@ -90,6 +91,7 @@ export const EvaluationWorkspacePage: React.FC = () => {
   const [isAuditTrailOpen, setIsAuditTrailOpen] = useState<boolean>(false);
   const [isFinalizing, setIsFinalizing] = useState<boolean>(false);
   const [isLiveStreamOpen, setIsLiveStreamOpen] = useState<boolean>(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
 
   const loadData = React.useCallback(async (showLoader = false) => {
     if (!id) return;
@@ -248,19 +250,7 @@ export const EvaluationWorkspacePage: React.FC = () => {
   };
 
   const handleExport = () => {
-    setNotificationMessage('Generating and downloading institutional PDF evaluation dossier...');
-    const url = api.getReportPdfUrl(evalId);
-    const win = window.open(url, '_blank');
-    if (!win) {
-      // Fallback for pop-up blockers: trigger direct file download
-      const a = document.createElement('a');
-      a.href = api.getReportPdfUrl(evalId, undefined, true);
-      a.download = `ProjectXRay_Report_${evalId}.html`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    }
-    setTimeout(() => setNotificationMessage(null), 4000);
+    setIsExportModalOpen(true);
   };
 
   const queryParams = new URLSearchParams(location.search);
@@ -1252,6 +1242,15 @@ export const EvaluationWorkspacePage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ExportDossierModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        evaluationId={evalId}
+        projectName={project?.name}
+        overallScore={project?.overallScore}
+        verdict={project?.verdict}
+      />
     </div>
   );
 };

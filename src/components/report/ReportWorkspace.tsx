@@ -41,6 +41,7 @@ import { EvidenceExplorerPanel } from './EvidenceExplorerPanel';
 import { ShareReportModal } from './ShareReportModal';
 import { ReportVersionComparisonModal } from './ReportVersionComparisonModal';
 import { ReportLoadingModal } from './ReportLoadingModal';
+import { ExportDossierModal } from './ExportDossierModal';
 
 interface ReportWorkspaceProps {
   evaluationId: string;
@@ -84,6 +85,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [showShareModal, setShowShareModal] = useState<boolean>(false);
+  const [showExportModal, setShowExportModal] = useState<boolean>(false);
   const [showCompareModal, setShowCompareModal] = useState<boolean>(false);
   const [showEvidencePanel, setShowEvidencePanel] = useState<boolean>(true);
   const [selectedEvidenceId, setSelectedEvidenceId] = useState<string | null>(null);
@@ -229,10 +231,21 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
         currentVersion={selectedVersion}
       />
 
+      <ExportDossierModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        evaluationId={evaluationId}
+        projectName={r?.projectName}
+        version={selectedVersion}
+        overallScore={r?.overallScore}
+        verdict={r?.overallVerdict}
+      />
+
       {/* Top Banner */}
       <ReportHeaderBanner
         report={r}
         onDownloadPdf={() => window.open(api.getReportPdfUrl(evaluationId, selectedVersion), '_blank')}
+        onExport={() => setShowExportModal(true)}
         onPrint={() => window.print()}
         onShare={() => setShowShareModal(true)}
         onRegenerate={handleRegenerate}
@@ -256,14 +269,14 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
       <div className="flex flex-col lg:flex-row items-start gap-6 relative">
         {/* LEFT COLUMN: Sticky Navigation TOC + Version & QA Card */}
         <aside className="w-full lg:w-72 xl:w-80 flex-shrink-0 lg:sticky lg:top-6 space-y-4">
-          <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 backdrop-blur-md shadow-lg space-y-3">
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 to-[#0b1222]/95 border border-cyan-500/25 backdrop-blur-md shadow-xl shadow-cyan-950/20 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
                 Report Version
               </span>
               <button
                 onClick={() => setShowCompareModal(true)}
-                className="inline-flex items-center gap-1 text-[11px] font-mono text-sky-400 hover:text-sky-300 hover:underline"
+                className="inline-flex items-center gap-1 text-[11px] font-mono text-cyan-400 hover:text-cyan-300 hover:underline"
               >
                 <GitCompare className="w-3 h-3" />
                 Diff / Compare
@@ -274,7 +287,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
               <select
                 value={selectedVersion}
                 onChange={(e) => setSelectedVersion(parseInt(e.target.value, 10))}
-                className="w-full px-3 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-slate-200 font-mono focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-1.5 text-xs bg-slate-950/90 border border-slate-700/80 rounded-lg text-slate-200 font-mono focus:outline-none focus:border-cyan-500"
               >
                 {versions.map((v) => (
                   <option key={v.version} value={v.version}>
@@ -300,7 +313,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
             </div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 backdrop-blur-md shadow-lg space-y-3">
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 to-[#0b1222]/95 border border-cyan-500/25 backdrop-blur-md shadow-xl shadow-cyan-950/20 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-mono uppercase tracking-wider text-slate-300 font-semibold">
                 Table of Contents (22)
@@ -351,7 +364,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
         {/* CENTER COLUMN: All 22 Structured Report Sections */}
         <main className="flex-1 min-w-0 space-y-8">
           {/* SECTION 1: EXECUTIVE SUMMARY */}
-          <section id="sec-01" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-01" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
@@ -430,7 +443,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 2: PROJECT DNA & PROFILE */}
-          <section id="sec-02" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-02" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
               <div className="p-2.5 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-400">
                 <Dna className="w-6 h-6" />
@@ -473,7 +486,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 3: PROBLEM ANALYSIS */}
-          <section id="sec-03" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-03" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
               <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400">
                 <AlertTriangle className="w-6 h-6" />
@@ -512,7 +525,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 4: TECHNICAL ASSESSMENT */}
-          <section id="sec-04" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-04" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-start justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400">
@@ -567,7 +580,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 5: ORIGINALITY & PRIOR ART */}
-          <section id="sec-05" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-05" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-start justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-teal-500/10 border border-teal-500/30 text-teal-400">
@@ -617,7 +630,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 6: CLAIM VERIFICATION */}
-          <section id="sec-06" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-06" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-start justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
@@ -667,7 +680,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 7: PRESENTATION ANALYSIS */}
-          <section id="sec-07" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-07" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-start justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-fuchsia-500/10 border border-fuchsia-500/30 text-fuchsia-400">
@@ -707,7 +720,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 8: DEMONSTRATION EXECUTION */}
-          <section id="sec-08" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-08" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-start justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-pink-500/10 border border-pink-500/30 text-pink-400">
@@ -757,7 +770,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 9: SOCIAL IMPACT */}
-          <section id="sec-09" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-09" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
               <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400">
                 <HeartHandshake className="w-6 h-6" />
@@ -782,7 +795,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 10: ECONOMIC & VALUE POTENTIAL */}
-          <section id="sec-10" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-10" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
               <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
                 <DollarSign className="w-6 h-6" />
@@ -810,7 +823,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 11: ENVIRONMENTAL SUSTAINABILITY */}
-          <section id="sec-11" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-11" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
               <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
                 <Leaf className="w-6 h-6" />
@@ -827,7 +840,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 12: FEASIBILITY & READINESS */}
-          <section id="sec-12" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-12" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-start justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400">
@@ -871,7 +884,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 13: RISK ASSESSMENT */}
-          <section id="sec-13" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-13" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
               <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400">
                 <ShieldAlert className="w-6 h-6" />
@@ -906,7 +919,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 14: TOP RECOMMENDATIONS */}
-          <section id="sec-14" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-14" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
               <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
                 <Lightbulb className="w-6 h-6" />
@@ -936,7 +949,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 15: FUTURE SCOPE */}
-          <section id="sec-15" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-15" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
               <div className="p-2.5 rounded-xl bg-violet-500/10 border border-violet-500/30 text-violet-400">
                 <Compass className="w-6 h-6" />
@@ -968,7 +981,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 16: COMMERCIALIZATION */}
-          <section id="sec-16" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-16" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
               <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
                 <TrendingUp className="w-6 h-6" />
@@ -1011,7 +1024,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 17: JURY DEFENSE INQUIRIES */}
-          <section id="sec-17" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-17" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
               <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
                 <Gavel className="w-6 h-6" />
@@ -1042,7 +1055,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 18: EVIDENCE LOCKER */}
-          <section id="sec-18" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-18" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-start justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
@@ -1086,7 +1099,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 19: RESEARCH CITATIONS */}
-          <section id="sec-19" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-19" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
               <div className="p-2.5 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-400">
                 <BookOpen className="w-6 h-6" />
@@ -1131,7 +1144,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 20: CONSISTENCY & QA AUDIT */}
-          <section id="sec-20" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-20" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-start justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
@@ -1175,7 +1188,7 @@ export const ReportWorkspace: React.FC<ReportWorkspaceProps> = ({
           </section>
 
           {/* SECTION 21: LIMITATIONS */}
-          <section id="sec-21" className="scroll-mt-6 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-6">
+          <section id="sec-21" className="scroll-mt-6 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-[#0c1427]/95 via-[#0d1830]/90 to-[#0a1120]/95 border border-cyan-500/25 shadow-xl shadow-cyan-950/20 space-y-6 relative overflow-hidden">
             <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
               <div className="p-2.5 rounded-xl bg-slate-800 text-slate-300">
                 <AlertCircle className="w-6 h-6" />

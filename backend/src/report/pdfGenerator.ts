@@ -35,19 +35,113 @@ export class PdfGenerator {
       }
     }
 
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       font-size: 9.5pt;
-      line-height: 1.45;
+      line-height: 1.5;
       color: #0f172a;
-      background: #ffffff;
+      background: #0b1322;
       margin: 0;
-      padding: 0;
+      padding: 32px 16px;
     }
 
-    /* Print Break Utilities */
+    /* Screen preview document wrapper */
+    .document-wrapper {
+      max-width: 860px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 48px;
+      border-radius: 8px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1);
+      border: 1px solid #cbd5e1;
+    }
+
+    /* Top Action Bar in Screen Mode */
+    .screen-toolbar {
+      position: sticky;
+      top: 16px;
+      z-index: 999;
+      max-width: 860px;
+      margin: 0 auto 20px auto;
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(8, 145, 178, 0.4);
+      border-radius: 12px;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      color: #ffffff;
+      font-family: monospace;
+      font-size: 11px;
+    }
+
+    .toolbar-title {
+      font-weight: 700;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn-action {
+      background: #0891b2;
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 11px;
+      border: none;
+      border-radius: 6px;
+      padding: 7px 14px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.2s;
+    }
+    .btn-action:hover {
+      background: #06b6d4;
+    }
+
+    .btn-secondary {
+      background: #4f46e5;
+    }
+    .btn-secondary:hover {
+      background: #6366f1;
+    }
+
+    /* Print Break Utilities & Print Media Overrides */
     .page-break { page-break-after: always; }
     .avoid-break { page-break-inside: avoid; }
+
+    @media print {
+      body {
+        background: #ffffff !important;
+        padding: 0 !important;
+      }
+      .screen-toolbar {
+        display: none !important;
+      }
+      .document-wrapper {
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        border: none !important;
+        border-radius: 0 !important;
+      }
+    }
 
     /* Cover Page */
     .cover-container {
@@ -228,6 +322,23 @@ export class PdfGenerator {
   </style>
 </head>
 <body>
+
+  <div class="screen-toolbar">
+    <div class="toolbar-title">
+      <span>🛡️ PROJECTX-RAY AI • DOSSIER EXPORT VIEWER</span>
+      <span style="color: #94a3b8;">v${report.version || 1}.0</span>
+    </div>
+    <div class="toolbar-actions">
+      <button class="btn-action" onclick="window.print()">
+        🖨️ Print / Save as PDF
+      </button>
+      <a class="btn-action btn-secondary" href="/api/evaluations/${report.evaluationId}/report/docx" download>
+        📄 Download Word (.DOCX)
+      </a>
+    </div>
+  </div>
+
+  <div class="document-wrapper">
 
   <!-- ==================== COVER PAGE ==================== -->
   <div class="cover-container page-break">
@@ -572,6 +683,8 @@ export class PdfGenerator {
       <b>Audit Status:</b> <span class="badge badge-green">RATIFIED FINAL</span>
     </div>
   </div>
+
+  </div> <!-- end document-wrapper -->
 
 </body>
 </html>`;

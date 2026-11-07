@@ -26,6 +26,7 @@ evaluationRouter.get('/:id', EvaluationController.getById);
 evaluationRouter.post('/:id/start', EvaluationController.start);
 evaluationRouter.post('/:id/retry', EvaluationController.retry);
 evaluationRouter.post('/:id/cancel', EvaluationController.cancel);
+evaluationRouter.post('/:id/finalize', EvaluationController.finalize);
 evaluationRouter.get('/:id/stream', EvaluationController.streamPipeline);
 
 import originalityRouter from './originalityIntelligenceRoutes';
